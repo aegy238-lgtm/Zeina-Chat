@@ -1,0 +1,7 @@
+{
+  "name": "صوت العرب - Voice Chat",
+  "description": "تطبيق دردشة صوتية اجتماعي مع غرف تفاعلية، هدايا، وإطارات مميزة.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
