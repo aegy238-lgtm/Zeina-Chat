@@ -2,15 +2,15 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { X, Check, Crown, Lock } from 'lucide-react';
 import { VIPPackage, User } from '../types';
-import { VIP_LEVELS } from '../constants';
 
 interface VIPModalProps {
   user: User;
+  vipLevels: VIPPackage[];
   onClose: () => void;
   onBuy: (vip: VIPPackage) => void;
 }
 
-const VIPModal: React.FC<VIPModalProps> = ({ user, onClose, onBuy }) => {
+const VIPModal: React.FC<VIPModalProps> = ({ user, vipLevels, onClose, onBuy }) => {
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose}></div>
@@ -44,7 +44,7 @@ const VIPModal: React.FC<VIPModalProps> = ({ user, onClose, onBuy }) => {
 
         {/* List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
-           {VIP_LEVELS.map((vip) => {
+           {vipLevels.map((vip) => {
              const isLocked = vip.level > (user.vipLevel || 0) + 1; // Example logic: open next level
              const isOwned = (user.vipLevel || 0) >= vip.level;
              const canAfford = user.coins >= vip.cost;
@@ -67,7 +67,7 @@ const VIPModal: React.FC<VIPModalProps> = ({ user, onClose, onBuy }) => {
                        <div className="absolute inset-0 rounded-full border border-white/10 bg-black">
                           <img src={user.avatar} className="w-full h-full rounded-full opacity-50 grayscale" alt="preview" />
                        </div>
-                       <img src={vip.frameUrl} className="absolute -inset-[18%] w-[136%] h-[136%] object-contain pointer-events-none drop-shadow-lg" alt={vip.name} />
+                       <img src={vip.frameUrl} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[135%] h-[135%] object-contain pointer-events-none drop-shadow-lg" alt={vip.name} />
                        <div className="absolute -bottom-1 -right-1 bg-black/80 text-[10px] px-1.5 rounded-full border border-white/10 text-white font-bold">
                           {vip.level}
                        </div>

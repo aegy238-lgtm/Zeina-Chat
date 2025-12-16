@@ -1,7 +1,18 @@
-import { Gift, Room, User, UserLevel, VIPPackage } from './types';
+import { Gift, Room, User, UserLevel, VIPPackage, StoreItem } from './types';
 
 // Mock frames using frame-like borders or transparent PNGs
 const BASE_FRAME_URL = "https://cdn-icons-png.flaticon.com/512";
+
+export const STORE_ITEMS: StoreItem[] = [
+  // Frames
+  { id: 'f_neon', name: 'إطار نيون', type: 'frame', price: 500, url: 'https://cdn-icons-png.flaticon.com/512/4325/4325969.png' },
+  { id: 'f_fire', name: 'إطار ناري', type: 'frame', price: 1200, url: 'https://cdn-icons-png.flaticon.com/512/9446/9446696.png' },
+  { id: 'f_flower', name: 'إطار زهور', type: 'frame', price: 300, url: 'https://cdn-icons-png.flaticon.com/512/9373/9373307.png' },
+  // Chat Bubbles (Using simple background colors/gradients images for simulation)
+  { id: 'b_blue', name: 'فقاعة زرقاء', type: 'bubble', price: 200, url: 'https://img.freepik.com/free-vector/gradient-blue-background_23-2149332560.jpg' },
+  { id: 'b_pink', name: 'فقاعة وردية', type: 'bubble', price: 400, url: 'https://img.freepik.com/free-vector/pink-gradient-background_23-2148946452.jpg' },
+  { id: 'b_gold', name: 'فقاعة ذهبية', type: 'bubble', price: 1000, url: 'https://img.freepik.com/free-vector/golden-gradient-background_23-2148946455.jpg' },
+];
 
 export const VIP_LEVELS: VIPPackage[] = [
   { level: 1, name: 'فارس', cost: 1000, color: 'text-slate-300', frameUrl: 'https://cdn-icons-png.flaticon.com/512/763/763328.png' },
@@ -23,7 +34,7 @@ export const CURRENT_USER: User = {
   name: 'ضيف كريم',
   avatar: 'https://picsum.photos/200/200?random=99',
   level: UserLevel.SILVER,
-  coins: 50000, // Increased default coins to allow testing VIP
+  coins: 50000, 
   isVip: false,
   vipLevel: 0,
   bio: 'أحب الشعر والسهر 🌙 | مصمم جرافيك',
@@ -34,6 +45,7 @@ export const CURRENT_USER: User = {
     following: 120,
     followers: 850
   },
+  ownedItems: [], // Initially empty
   isFollowing: false,
   isMuted: false
 };

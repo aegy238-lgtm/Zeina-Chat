@@ -37,24 +37,29 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user, onClose, isCu
         className="relative w-full max-w-md bg-[#10141f] rounded-t-[30px] overflow-hidden pointer-events-auto border-t border-white/10 shadow-2xl"
       >
         {/* Cover Image */}
-        <div className="h-32 bg-gradient-to-r from-indigo-600 via-purple-600 to-amber-600 relative">
-          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/30 backdrop-blur rounded-full text-white hover:bg-black/50 transition">
+        <div className="h-32 bg-slate-900 relative overflow-hidden">
+          {user.cover ? (
+             <img src={user.cover} className="w-full h-full object-cover" alt="Cover" />
+          ) : (
+             <div className="w-full h-full bg-gradient-to-r from-indigo-600 via-purple-600 to-amber-600"></div>
+          )}
+          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/30 backdrop-blur rounded-full text-white hover:bg-black/50 transition z-10">
             <X size={20} />
           </button>
         </div>
 
         <div className="px-6 pb-8 relative">
           {/* Avatar Area */}
-          <div className="flex justify-between items-end -mt-12 mb-4">
+          <div className="flex justify-between items-end -mt-10 mb-4">
              <div className="relative">
-                <div className={`w-24 h-24 rounded-full p-1 bg-[#10141f] relative ${!user.frame ? 'border-[4px] border-[#10141f] bg-gradient-to-br from-amber-300 to-yellow-600' : ''}`}>
+                <div className={`w-20 h-20 rounded-full bg-[#10141f] relative ${!user.frame ? 'p-1 border-[4px] border-[#10141f] bg-gradient-to-br from-amber-300 to-yellow-600' : ''}`}>
                    <img src={user.avatar} alt={user.name} className="w-full h-full rounded-full object-cover" />
                    
                    {/* VIP Frame */}
                    {user.frame && (
                       <img 
                         src={user.frame} 
-                        className="absolute -inset-[18%] w-[136%] h-[136%] object-contain pointer-events-none drop-shadow-xl z-20" 
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[135%] h-[135%] object-contain pointer-events-none drop-shadow-xl z-20" 
                         alt="frame" 
                       />
                    )}

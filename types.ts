@@ -7,12 +7,24 @@ export enum UserLevel {
   VIP = 'VIP'
 }
 
+export type ItemType = 'frame' | 'bubble';
+
+export interface StoreItem {
+  id: string;
+  name: string;
+  type: ItemType;
+  price: number;
+  url: string; // Image URL
+}
+
 export interface User {
   id: string;
   name: string;
   avatar: string;
   level: UserLevel;
   frame?: string; // URL to frame image
+  activeBubble?: string; // URL to active chat bubble image
+  cover?: string; // Cover/Header image URL
   coins: number;
   isVip: boolean;
   vipLevel?: number; // 1 to 12
@@ -24,6 +36,7 @@ export interface User {
     following: number;
     followers: number;
   };
+  ownedItems?: string[]; // IDs of owned items
   isFollowing?: boolean;
   isMuted?: boolean;
 }
@@ -52,6 +65,7 @@ export interface ChatMessage {
   content: string;
   type: 'text' | 'gift' | 'system';
   giftData?: Gift;
+  bubbleUrl?: string; // Custom bubble style
 }
 
 export interface Room {

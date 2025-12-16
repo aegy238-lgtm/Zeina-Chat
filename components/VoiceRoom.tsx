@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Room, User, ChatMessage, Gift, UserLevel } from '../types';
-import { CURRENT_USER, GIFTS } from '../constants';
-import { Mic, MicOff, Gift as GiftIcon, X, Send, Heart, Crown, Shield, Lock } from 'lucide-react';
+import { CURRENT_USER } from '../constants';
+import { Mic, MicOff, Gift as GiftIcon, X, Send, Heart, Crown, Shield, Lock, Check } from 'lucide-react';
 import { generateSimulatedChat, generateSystemAnnouncement } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
 import UserProfileSheet from './UserProfileSheet';
@@ -11,9 +11,11 @@ interface VoiceRoomProps {
   room: Room;
   onLeave: () => void;
   currentUser: User;
+  gifts: Gift[];
+  onEditProfile: () => void;
 }
 
-const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => {
+const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts, onEditProfile }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   // Initialize 8 fixed seats. Fill starting ones with room.speakers
@@ -28,6 +30,8 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
   const [isMuted, setIsMuted] = useState(true);
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [activeGiftEffect, setActiveGiftEffect] = useState<Gift | null>(null);
+  const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null); // null means 'All'
+  
   const [entranceBanner, setEntranceBanner] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null); // For Profile Sheet
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -102,13 +106,23 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
       userName: currentUser.name,
       userLevel: currentUser.level,
       content: inputValue,
-      type: 'text'
+      type: 'text',
+      bubbleUrl: currentUser.activeBubble // Attach current user bubble
     }]);
     setInputValue('');
   };
 
   const handleSendGift = (gift: Gift) => {
     setShowGiftModal(false);
+    
+    // Determine recipient name
+    let recipientName = 'الجميع';
+    if (giftRecipientId) {
+       const targetUser = seats.find(s => s?.id === giftRecipientId);
+       if (targetUser) recipientName = targetUser.name;
+    }
+
+    // Trigger visual effect
     setActiveGiftEffect(gift);
     setTimeout(() => setActiveGiftEffect(null), 3000);
 
@@ -117,11 +131,11 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
       userId: currentUser.id,
       userName: currentUser.name,
       userLevel: currentUser.level,
-      content: `أرسل ${gift.name}`,
+      content: `أرسل ${gift.name} إلى ${recipientName}`,
       type: 'gift',
       giftData: gift
     }]);
-    addToast(`تم إرسال ${gift.name} بنجاح`, 'success');
+    addToast(`تم إرسال ${gift.name} إلى ${recipientName}`, 'success');
   };
 
   const handleSeatClick = (index: number) => {
@@ -154,6 +168,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
     if (!selectedUser) return;
 
     if (action === 'gift') {
+       setGiftRecipientId(selectedUser.id);
        setShowGiftModal(true);
        setSelectedUser(null);
     } else if (action === 'toggleFollow') {
@@ -184,7 +199,8 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
        addToast(`تم فتح المحادثة الخاصة مع ${selectedUser.name}`, 'info');
        setSelectedUser(null);
     } else if (action === 'editProfile') {
-       addToast("هذا الإجراء متاح فقط في صفحة الإعدادات", 'info');
+       setSelectedUser(null); // Close profile sheet first
+       onEditProfile(); // Trigger parent handler
     } else if (action === 'support') {
        addToast("تم إرسال الدعم", 'success');
     } else if (action === 'more') {
@@ -234,17 +250,36 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
         )}
       </AnimatePresence>
 
-      {/* Full Screen Gift Effect Overlay */}
+      {/* Gift Effect Overlay (Shows for ALL gifts now) */}
       <AnimatePresence>
-        {activeGiftEffect && activeGiftEffect.animationType === 'full-screen' && (
+        {activeGiftEffect && (
            <motion.div 
              initial={{ scale: 0, opacity: 0 }}
              animate={{ scale: 1, opacity: 1 }}
-             exit={{ scale: 2, opacity: 0 }}
+             exit={{ scale: 1.5, opacity: 0 }}
              className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
            >
-              <div className="text-9xl animate-bounce">{activeGiftEffect.icon}</div>
-              <h1 className="absolute bottom-1/4 text-4xl font-bold text-amber-400 drop-shadow-lg">{activeGiftEffect.name}</h1>
+              <div className="relative flex flex-col items-center justify-center">
+                 {/* Background Effect for Full Screen */}
+                 {activeGiftEffect.animationType === 'full-screen' && (
+                    <div className="absolute inset-[-500px] bg-gradient-to-r from-purple-500/20 to-amber-500/20 blur-3xl rounded-full animate-pulse"></div>
+                 )}
+                 
+                 {/* Icon - Removed animate-bounce and increased sizes */}
+                 {activeGiftEffect.icon.startsWith('http') || activeGiftEffect.icon.startsWith('data:') ? (
+                    <img 
+                       src={activeGiftEffect.icon} 
+                       alt={activeGiftEffect.name} 
+                       className={`${activeGiftEffect.animationType === 'full-screen' ? 'w-80 h-80' : 'w-64 h-64'} object-contain drop-shadow-[0_0_25px_rgba(255,255,0,0.5)]`} 
+                    />
+                 ) : (
+                    <div className={`${activeGiftEffect.animationType === 'full-screen' ? 'text-9xl' : 'text-[10rem]'}`}>{activeGiftEffect.icon}</div>
+                 )}
+                 
+                 <h1 className="mt-8 text-5xl font-bold text-amber-400 drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] stroke-black">
+                    {activeGiftEffect.name}
+                 </h1>
+              </div>
            </motion.div>
         )}
       </AnimatePresence>
@@ -262,8 +297,8 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
                      {speaker ? (
                         <div className="relative w-full h-full flex items-center justify-center">
                            {/* Avatar Container */}
-                           <div className={`w-full h-full rounded-full p-[2px] overflow-hidden ${
-                             !speaker.frame ? (speaker.id === 'u1' ? 'bg-gradient-to-tr from-amber-400 to-yellow-200 shadow-amber-500/50 shadow-lg' : 'bg-gradient-to-tr from-blue-400 to-cyan-200') : ''
+                           <div className={`w-full h-full rounded-full overflow-hidden ${
+                             !speaker.frame ? (speaker.id === 'u1' ? 'p-[2px] bg-gradient-to-tr from-amber-400 to-yellow-200 shadow-amber-500/50 shadow-lg' : 'p-[2px] bg-gradient-to-tr from-blue-400 to-cyan-200') : ''
                            }`}>
                              <img 
                                 src={speaker.avatar} 
@@ -277,7 +312,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
                               <img 
                                 src={speaker.frame} 
                                 alt="Frame" 
-                                className="absolute -inset-[18%] w-[136%] h-[136%] object-contain pointer-events-none z-10 drop-shadow-lg"
+                                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[135%] h-[135%] object-contain pointer-events-none z-10 drop-shadow-lg"
                               />
                            )}
 
@@ -336,8 +371,13 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
                   ) : msg.type === 'gift' ? (
                      <div className="bg-gradient-to-r from-purple-900/80 to-pink-900/80 border border-purple-500/30 rounded-full p-1 pr-3 pl-1 flex items-center gap-2 self-start animate-pulse">
                         <span className="text-xs font-bold text-amber-400">{msg.userName}:</span>
-                        <span className="text-xs text-white opacity-90">أرسل {msg.giftData?.name}</span>
-                        <div className="bg-white/20 rounded-full w-6 h-6 flex items-center justify-center text-sm">{msg.giftData?.icon}</div>
+                        <span className="text-xs text-white opacity-90">{msg.content.replace(`${msg.userName}:`, '')}</span>
+                        <div className="bg-white/20 rounded-full w-6 h-6 flex items-center justify-center text-sm overflow-hidden">
+                           {msg.giftData?.icon.startsWith('http') || msg.giftData?.icon.startsWith('data:') ? 
+                              <img src={msg.giftData.icon} className="w-full h-full object-cover" /> : 
+                              msg.giftData?.icon
+                           }
+                        </div>
                      </div>
                   ) : (
                      <div className="flex items-start gap-2 max-w-[90%]">
@@ -349,7 +389,16 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
                         </div>
                         <div className="flex flex-col items-start">
                            <span className="text-[10px] text-slate-400 font-medium px-1 mb-0.5">{msg.userName}</span>
-                           <div className="bg-white/10 backdrop-blur-sm rounded-2xl rounded-tr-none px-3 py-2 text-sm text-white border border-white/5 shadow-sm hover:bg-white/15 transition-colors">
+                           <div 
+                              className={`rounded-2xl rounded-tr-none px-3 py-2 text-sm text-white shadow-sm transition-colors ${!msg.bubbleUrl ? 'bg-white/10 backdrop-blur-sm border border-white/5 hover:bg-white/15' : ''}`}
+                              style={msg.bubbleUrl ? { 
+                                 backgroundImage: `url(${msg.bubbleUrl})`, 
+                                 backgroundSize: 'cover',
+                                 backgroundPosition: 'center',
+                                 color: 'white',
+                                 textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                              } : {}}
+                           >
                               {msg.content}
                            </div>
                         </div>
@@ -393,7 +442,10 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
             </div>
 
             <button 
-               onClick={() => setShowGiftModal(true)}
+               onClick={() => {
+                  setGiftRecipientId(null); // Reset to 'All' default or nothing
+                  setShowGiftModal(true);
+               }}
                className="w-11 h-11 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full text-white shadow-lg shadow-purple-900/50 flex items-center justify-center hover:scale-105 transition-transform active:scale-95"
             >
                <GiftIcon size={20} />
@@ -412,23 +464,70 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser }) => 
                   className="w-full bg-[#10141f] rounded-t-[30px] p-6 pb-8 border-t border-white/10"
                   onClick={e => e.stopPropagation()}
                >
-                  <div className="flex justify-between items-center mb-6">
+                  {/* Gift Header & Wallet */}
+                  <div className="flex justify-between items-center mb-4">
                      <h3 className="text-white font-bold text-lg">إرسال هدية</h3>
                      <div className="bg-black/40 px-3 py-1.5 rounded-full flex items-center gap-2 border border-white/10">
                         <span className="text-yellow-400 font-bold text-sm">🪙 {currentUser.coins}</span>
                         <div className="w-4 h-4 rounded-full bg-yellow-500 flex items-center justify-center text-[10px] text-black font-bold">+</div>
                      </div>
                   </div>
+
+                  {/* Recipient Selector (Persons on Mic) */}
+                  <div className="mb-4">
+                     <p className="text-[10px] text-slate-400 mb-2">إرسال إلى:</p>
+                     <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                        {/* Option: All */}
+                        <div 
+                           onClick={() => setGiftRecipientId(null)}
+                           className={`flex flex-col items-center gap-1 cursor-pointer min-w-[50px] ${!giftRecipientId ? 'opacity-100' : 'opacity-50 hover:opacity-100'}`}
+                        >
+                           <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all ${!giftRecipientId ? 'bg-amber-500 border-amber-300 shadow-lg shadow-amber-900/50' : 'bg-slate-800 border-slate-600'}`}>
+                              <span className="text-xs font-bold text-white">الجميع</span>
+                           </div>
+                           <span className={`text-[10px] ${!giftRecipientId ? 'text-amber-400 font-bold' : 'text-slate-400'}`}>الغرفة</span>
+                        </div>
+
+                        {/* Active Speakers */}
+                        {seats.map((seat, idx) => {
+                           if (!seat) return null;
+                           const isSelected = giftRecipientId === seat.id;
+                           return (
+                              <div 
+                                 key={seat.id}
+                                 onClick={() => setGiftRecipientId(seat.id)}
+                                 className={`flex flex-col items-center gap-1 cursor-pointer min-w-[50px] ${isSelected ? 'opacity-100' : 'opacity-50 hover:opacity-100'}`}
+                              >
+                                 <div className={`relative w-12 h-12 rounded-full p-[2px] transition-all ${isSelected ? 'border-2 border-pink-500 shadow-lg shadow-pink-900/50' : 'border border-slate-600'}`}>
+                                    <img src={seat.avatar} className="w-full h-full rounded-full object-cover" />
+                                    {isSelected && (
+                                       <div className="absolute -top-1 -right-1 bg-pink-500 rounded-full p-0.5 border border-black">
+                                          <Check size={8} className="text-white" />
+                                       </div>
+                                    )}
+                                 </div>
+                                 <span className={`text-[10px] truncate max-w-[60px] ${isSelected ? 'text-pink-400 font-bold' : 'text-slate-400'}`}>{seat.name}</span>
+                              </div>
+                           )
+                        })}
+                     </div>
+                  </div>
                   
-                  <div className="grid grid-cols-3 gap-3">
-                     {GIFTS.map(gift => (
+                  {/* Gifts Grid */}
+                  <div className="grid grid-cols-3 gap-3 max-h-[40vh] overflow-y-auto">
+                     {gifts.map(gift => (
                         <button 
                            key={gift.id}
                            onClick={() => handleSendGift(gift)}
                            className="flex flex-col items-center p-3 rounded-2xl bg-slate-800/50 hover:bg-slate-700 border border-transparent hover:border-amber-500/50 transition-all group relative overflow-hidden"
                         >
                            <div className="absolute inset-0 bg-gradient-to-b from-amber-500/0 to-amber-500/0 group-hover:to-amber-500/10 transition-all"></div>
-                           <span className="text-4xl mb-2 filter drop-shadow-md group-hover:scale-110 transition-transform duration-300">{gift.icon}</span>
+                           <div className="w-12 h-12 mb-2 flex items-center justify-center filter drop-shadow-md group-hover:scale-110 transition-transform duration-300">
+                              {gift.icon.startsWith('http') || gift.icon.startsWith('data:') ? 
+                                 <img src={gift.icon} className="w-full h-full object-contain" alt={gift.name} /> : 
+                                 <span className="text-4xl">{gift.icon}</span>
+                              }
+                           </div>
                            <span className="text-white text-xs font-medium">{gift.name}</span>
                            <span className="text-yellow-400 text-[10px] mt-1 bg-black/30 px-2 py-0.5 rounded-full">{gift.cost}</span>
                         </button>

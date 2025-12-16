@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Home, User as UserIcon, Plus, Bell, Crown, Gem, Settings, ChevronRight, Edit3, Share2, LogOut, Shield, Database } from 'lucide-react';
+import { Home, User as UserIcon, Plus, Bell, Crown, Gem, Settings, ChevronRight, Edit3, Share2, LogOut, Shield, Database, ShoppingBag } from 'lucide-react';
 import RoomCard from './components/RoomCard';
 import VoiceRoom from './components/VoiceRoom';
 import Toast, { ToastMessage } from './components/Toast';
 import VIPModal from './components/VIPModal';
 import AdminPanel from './components/AdminPanel';
-import { MOCK_ROOMS, CURRENT_USER } from './constants';
-import { Room, User, VIPPackage, UserLevel } from './types';
+import EditProfileModal from './components/EditProfileModal';
+import BagModal from './components/BagModal';
+import { MOCK_ROOMS, CURRENT_USER, VIP_LEVELS, GIFTS as INITIAL_GIFTS, STORE_ITEMS } from './constants';
+import { Room, User, VIPPackage, UserLevel, Gift, StoreItem } from './types';
 import { AnimatePresence } from 'framer-motion';
 
 export default function App() {
@@ -14,9 +16,14 @@ export default function App() {
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [user, setUser] = useState<User>(CURRENT_USER);
   const [rooms, setRooms] = useState<Room[]>(MOCK_ROOMS);
+  const [vipLevels, setVipLevels] = useState<VIPPackage[]>(VIP_LEVELS);
+  const [gifts, setGifts] = useState<Gift[]>(INITIAL_GIFTS);
+  const [storeItems, setStoreItems] = useState<StoreItem[]>(STORE_ITEMS);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showVIPModal, setShowVIPModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showBagModal, setShowBagModal] = useState(false);
 
   const handleRoomJoin = (room: Room) => {
     setCurrentRoom(room);
@@ -34,12 +41,9 @@ export default function App() {
      }, 3000);
   };
 
-  const handleEditProfile = () => {
-     const newName = prompt("أدخل اسمك الجديد:", user.name);
-     if (newName) {
-        setUser({...user, name: newName});
-        addToast("تم تحديث الملف الشخصي بنجاح", 'success');
-     }
+  const handleUpdateProfile = (updatedData: Partial<User>) => {
+     setUser(prev => ({ ...prev, ...updatedData }));
+     addToast("تم تحديث الملف الشخصي بنجاح", 'success');
   };
 
   const handleBuyVIP = (pkg: VIPPackage) => {
@@ -58,8 +62,33 @@ export default function App() {
      }
   };
 
+  // Buy item from Bag/Store
+  const handleBuyStoreItem = (item: StoreItem) => {
+     if (user.coins >= item.price) {
+        setUser(prev => ({
+           ...prev,
+           coins: prev.coins - item.price,
+           ownedItems: [...(prev.ownedItems || []), item.id]
+        }));
+        addToast(`تم شراء ${item.name} بنجاح`, 'success');
+     } else {
+        addToast("رصيدك غير كافي", 'error');
+     }
+  };
+
+  // Equip item
+  const handleEquipStoreItem = (item: StoreItem) => {
+     if (item.type === 'frame') {
+        setUser(prev => ({ ...prev, frame: item.url }));
+        addToast(`تم تجهيز الإطار ${item.name}`, 'success');
+     } else {
+        setUser(prev => ({ ...prev, activeBubble: item.url }));
+        addToast(`تم تفعيل الفقاعة ${item.name}`, 'success');
+     }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white relative max-w-md mx-auto shadow-2xl overflow-hidden flex flex-col font-cairo">
+    <div className="h-[100dvh] w-full bg-slate-950 text-white relative md:max-w-md mx-auto shadow-2xl overflow-hidden flex flex-col font-cairo">
       <Toast toasts={toasts} onRemove={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
       
       {/* Admin Panel */}
@@ -72,6 +101,12 @@ export default function App() {
                setRooms={setRooms}
                currentUser={user}
                onUpdateUser={setUser}
+               vipLevels={vipLevels}
+               setVipLevels={setVipLevels}
+               gifts={gifts}
+               setGifts={setGifts}
+               storeItems={storeItems}
+               setStoreItems={setStoreItems}
             />
          )}
       </AnimatePresence>
@@ -80,8 +115,33 @@ export default function App() {
          {showVIPModal && (
             <VIPModal 
                user={user} 
+               vipLevels={vipLevels}
                onClose={() => setShowVIPModal(false)} 
                onBuy={handleBuyVIP}
+            />
+         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+         {showBagModal && (
+            <BagModal 
+               isOpen={showBagModal}
+               onClose={() => setShowBagModal(false)}
+               items={storeItems}
+               user={user}
+               onBuy={handleBuyStoreItem}
+               onEquip={handleEquipStoreItem}
+            />
+         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+         {showEditProfileModal && (
+            <EditProfileModal 
+               isOpen={showEditProfileModal}
+               onClose={() => setShowEditProfileModal(false)}
+               currentUser={user}
+               onSave={handleUpdateProfile}
             />
          )}
       </AnimatePresence>
@@ -92,6 +152,8 @@ export default function App() {
            room={currentRoom} 
            currentUser={user} 
            onLeave={handleRoomLeave} 
+           gifts={gifts}
+           onEditProfile={() => setShowEditProfileModal(true)}
         />
       )}
 
@@ -186,9 +248,17 @@ export default function App() {
            {/* Professional Profile Tab */}
            {activeTab === 'profile' && (
              <div className="relative">
-                {/* Header Image */}
-                <div className="h-40 bg-gradient-to-r from-indigo-900 via-purple-900 to-slate-900 relative overflow-hidden">
-                   <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+                {/* Header Image (Cover) */}
+                <div className="h-40 bg-slate-900 relative overflow-hidden">
+                   {user.cover ? (
+                      <img src={user.cover} className="w-full h-full object-cover animate-fade-in" alt="Cover" />
+                   ) : (
+                      <div className="w-full h-full bg-gradient-to-r from-indigo-900 via-purple-900 to-slate-900 relative">
+                         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+                      </div>
+                   )}
+                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
+                   
                    <div className="absolute top-4 right-4 flex gap-2">
                       <button onClick={() => addToast('تم نسخ رابط المشاركة', 'success')} className="p-2 bg-black/30 backdrop-blur rounded-full hover:bg-black/40 text-white">
                          <Share2 size={18} />
@@ -201,15 +271,16 @@ export default function App() {
 
                 <div className="px-5 pb-10">
                    {/* Avatar & Basic Info */}
-                   <div className="relative -mt-12 mb-4 flex justify-between items-end">
+                   <div className="relative -mt-10 mb-4 flex justify-between items-end">
                       <div className="relative">
-                         <div className={`w-24 h-24 rounded-full p-1 bg-slate-950 relative ${!user.frame ? 'border-4 border-slate-800' : ''}`}>
+                         {/* Adjusted container: no border/padding if frame exists */}
+                         <div className={`w-20 h-20 rounded-full bg-slate-950 relative ${!user.frame ? 'p-1 border-4 border-slate-800' : ''}`}>
                             <img src={user.avatar} className="w-full h-full rounded-full object-cover" alt="Me" />
                             {user.frame && (
-                               <img src={user.frame} className="absolute -inset-[18%] w-[136%] h-[136%] object-contain pointer-events-none drop-shadow-lg z-20" alt="Frame" />
+                               <img src={user.frame} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[135%] h-[135%] object-contain pointer-events-none drop-shadow-lg z-20" alt="Frame" />
                             )}
                          </div>
-                         <div className="absolute bottom-1 right-1 bg-slate-950 p-1 rounded-full cursor-pointer z-30" onClick={handleEditProfile}>
+                         <div className="absolute bottom-1 right-1 bg-slate-950 p-1 rounded-full cursor-pointer z-30" onClick={() => setShowEditProfileModal(true)}>
                             <div className="bg-amber-500 rounded-full p-0.5">
                                <Edit3 size={12} className="text-slate-900" />
                             </div>
@@ -271,6 +342,7 @@ export default function App() {
 
                       {[
                          { icon: <Crown size={18} className="text-amber-500" />, label: 'متجر الإطارات VIP', badge: 'جديد', action: () => setShowVIPModal(true) },
+                         { icon: <ShoppingBag size={18} className="text-blue-500" />, label: 'الحقيبة (المتجر)', badge: 'خاص', action: () => setShowBagModal(true) },
                          { icon: <Gem size={18} className="text-purple-500" />, label: 'إنجازاتي', badge: '' },
                          { icon: <Shield size={18} className="text-blue-500" />, label: 'مركز المساعدة', badge: '' },
                       ].map((item, idx) => (
