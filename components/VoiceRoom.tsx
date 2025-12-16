@@ -291,7 +291,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                <div key={index} className="flex flex-col items-center gap-1 relative">
                   <button 
                     onClick={() => handleSeatClick(index)}
-                    className={`relative w-[70px] h-[70px] rounded-full flex items-center justify-center transition-all active:scale-95
+                    className={`relative w-[58px] h-[58px] rounded-full flex items-center justify-center transition-all active:scale-95
                       ${speaker ? '' : 'bg-black/20 border border-white/10 hover:bg-white/10'}`}
                   >
                      {speaker ? (
@@ -307,7 +307,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                              />
                            </div>
 
-                           {/* VIP Frame Overlay */}
+                           {/* VIP Frame Overlay - Adjusted scale and position */}
                            {speaker.frame && (
                               <img 
                                 src={speaker.frame} 
@@ -326,7 +326,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                            {/* Mute Indicator */}
                            {speaker.isMuted && (
                               <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full z-20">
-                                 <MicOff size={20} className="text-white" />
+                                 <MicOff size={16} className="text-white" />
                               </div>
                            )}
                            
@@ -337,13 +337,13 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                            
                            {/* Name Tag */}
                            <div className="absolute -bottom-5 w-full flex justify-center z-30">
-                             <span className="text-[10px] text-white bg-black/40 backdrop-blur-sm px-2 rounded-full truncate max-w-[120%] border border-white/5">
+                             <span className="text-[9px] text-white bg-black/40 backdrop-blur-sm px-2 rounded-full truncate max-w-[120%] border border-white/5">
                                {speaker.name}
                              </span>
                            </div>
                         </div>
                      ) : (
-                        <Mic size={20} className="text-white/30" />
+                        <Mic size={18} className="text-white/30" />
                      )}
                      
                      {/* Seat Number (Optional visual aid) */}
@@ -396,7 +396,8 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                                  backgroundSize: 'cover',
                                  backgroundPosition: 'center',
                                  color: 'white',
-                                 textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                                 textShadow: '0 1px 2px rgba(0,0,0,0.8), 0 0 5px rgba(0,0,0,0.5)', // Stronger shadow for readability on any bubble
+                                 fontWeight: '600'
                               } : {}}
                            >
                               {msg.content}

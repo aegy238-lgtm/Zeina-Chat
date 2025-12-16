@@ -27,10 +27,10 @@ const BagModal: React.FC<BagModalProps> = ({ isOpen, onClose, items, user, onBuy
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="relative w-full max-w-sm bg-gradient-to-br from-slate-900 via-[#1a1f35] to-slate-900 rounded-[2rem] border border-blue-500/30 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+        className="relative w-full max-w-sm bg-gradient-to-br from-slate-900 via-[#1a1f35] to-slate-900 rounded-[2rem] border border-blue-500/30 shadow-2xl overflow-hidden flex flex-col h-[80vh] md:h-auto md:max-h-[85vh]"
       >
         {/* Header */}
-        <div className="relative p-6 text-center border-b border-white/5">
+        <div className="relative p-6 text-center border-b border-white/5 flex-shrink-0">
           <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white/50 hover:text-white transition">
              <X size={20} />
           </button>
@@ -51,7 +51,7 @@ const BagModal: React.FC<BagModalProps> = ({ isOpen, onClose, items, user, onBuy
         </div>
 
         {/* Tabs */}
-        <div className="flex p-2 gap-2 bg-black/20">
+        <div className="flex p-2 gap-2 bg-black/20 flex-shrink-0">
            <button 
               onClick={() => setActiveTab('frame')}
               className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
@@ -70,79 +70,81 @@ const BagModal: React.FC<BagModalProps> = ({ isOpen, onClose, items, user, onBuy
            </button>
         </div>
 
-        {/* List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide grid grid-cols-2 gap-3 content-start">
-           {filteredItems.map((item) => {
-             const isOwned = user.ownedItems?.includes(item.id);
-             const isEquipped = item.type === 'frame' ? user.frame === item.url : user.activeBubble === item.url;
-             const canAfford = user.coins >= item.price;
+        {/* List - Added min-h-0 and overscroll-contain for better scrolling */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide min-h-0 overscroll-contain">
+           <div className="grid grid-cols-2 gap-3 pb-4">
+             {filteredItems.map((item) => {
+               const isOwned = user.ownedItems?.includes(item.id);
+               const isEquipped = item.type === 'frame' ? user.frame === item.url : user.activeBubble === item.url;
+               const canAfford = user.coins >= item.price;
 
-             return (
-               <div 
-                 key={item.id} 
-                 className={`relative rounded-2xl p-3 border transition-all overflow-hidden flex flex-col items-center gap-2 group ${
-                   isEquipped 
-                     ? 'bg-blue-900/20 border-blue-500/50' 
-                     : isOwned ? 'bg-slate-800/80 border-white/10' : 'bg-slate-800/40 border-white/5'
-                 }`}
-               >
-                 {/* Preview */}
-                 <div className="relative w-20 h-20 flex-shrink-0 flex items-center justify-center bg-black/30 rounded-full mb-1">
-                    {item.type === 'frame' ? (
-                       <>
-                          <img src={user.avatar} className="w-16 h-16 rounded-full opacity-60 grayscale" alt="preview" />
-                          <img src={item.url} className="absolute inset-0 w-full h-full object-contain pointer-events-none drop-shadow-lg" alt={item.name} />
-                       </>
-                    ) : (
-                       <div 
-                         className="w-16 h-12 rounded-xl flex items-center justify-center text-[8px] text-white/80"
-                         style={{ 
-                            backgroundImage: `url(${item.url})`, 
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center'
-                         }}
-                       >
-                          تجربة
-                       </div>
-                    )}
-                 </div>
+               return (
+                 <div 
+                   key={item.id} 
+                   className={`relative rounded-2xl p-3 border transition-all overflow-hidden flex flex-col items-center gap-2 group ${
+                     isEquipped 
+                       ? 'bg-blue-900/20 border-blue-500/50' 
+                       : isOwned ? 'bg-slate-800/80 border-white/10' : 'bg-slate-800/40 border-white/5'
+                   }`}
+                 >
+                   {/* Preview */}
+                   <div className="relative w-20 h-20 flex-shrink-0 flex items-center justify-center bg-black/30 rounded-full mb-1">
+                      {item.type === 'frame' ? (
+                         <>
+                            <img src={user.avatar} className="w-16 h-16 rounded-full opacity-60 grayscale" alt="preview" />
+                            <img src={item.url} className="absolute inset-0 w-full h-full object-contain pointer-events-none drop-shadow-lg scale-135" alt={item.name} />
+                         </>
+                      ) : (
+                         <div 
+                           className="w-16 h-12 rounded-xl flex items-center justify-center text-[8px] text-white font-bold shadow-sm"
+                           style={{ 
+                              backgroundImage: `url(${item.url})`, 
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center'
+                           }}
+                         >
+                            تجربة
+                         </div>
+                      )}
+                   </div>
 
-                 <div className="text-center w-full">
-                    <h3 className="font-bold text-xs text-white truncate">{item.name}</h3>
-                    {!isOwned && <p className="text-[10px] text-yellow-500 font-mono mt-0.5">{item.price} 🪙</p>}
-                 </div>
+                   <div className="text-center w-full">
+                      <h3 className="font-bold text-xs text-white truncate">{item.name}</h3>
+                      {!isOwned && <p className="text-[10px] text-yellow-500 font-mono mt-0.5">{item.price} 🪙</p>}
+                   </div>
 
-                 <div className="w-full mt-auto">
-                    {isEquipped ? (
-                       <button disabled className="w-full py-1.5 bg-green-500/20 text-green-400 text-[10px] font-bold rounded-lg border border-green-500/20 flex items-center justify-center gap-1">
-                          <Check size={10} /> مستخدم
-                       </button>
-                    ) : isOwned ? (
-                       <button 
-                          onClick={() => onEquip(item)}
-                          className="w-full py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-[10px] font-bold rounded-lg transition-colors"
-                       >
-                          تجهيز
-                       </button>
-                    ) : (
-                       <button 
-                          disabled={!canAfford}
-                          onClick={() => onBuy(item)}
-                          className={`w-full py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                             canAfford 
-                               ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow hover:brightness-110' 
-                               : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                          }`}
-                       >
-                          شراء
-                       </button>
-                    )}
+                   <div className="w-full mt-auto">
+                      {isEquipped ? (
+                         <button disabled className="w-full py-1.5 bg-green-500/20 text-green-400 text-[10px] font-bold rounded-lg border border-green-500/20 flex items-center justify-center gap-1">
+                            <Check size={10} /> مستخدم
+                         </button>
+                      ) : isOwned ? (
+                         <button 
+                            onClick={() => onEquip(item)}
+                            className="w-full py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-[10px] font-bold rounded-lg transition-colors"
+                         >
+                            تجهيز
+                         </button>
+                      ) : (
+                         <button 
+                            disabled={!canAfford}
+                            onClick={() => onBuy(item)}
+                            className={`w-full py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                               canAfford 
+                                 ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow hover:brightness-110' 
+                                 : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                            }`}
+                         >
+                            شراء
+                         </button>
+                      )}
+                   </div>
                  </div>
-               </div>
-             );
-           })}
+               );
+             })}
+           </div>
            {filteredItems.length === 0 && (
-              <div className="col-span-2 text-center text-slate-500 text-xs py-10">
+              <div className="text-center text-slate-500 text-xs py-10">
                  لا توجد عناصر متاحة حالياً
               </div>
            )}

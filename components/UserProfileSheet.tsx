@@ -52,7 +52,7 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user, onClose, isCu
           {/* Avatar Area */}
           <div className="flex justify-between items-end -mt-10 mb-4">
              <div className="relative">
-                <div className={`w-20 h-20 rounded-full bg-[#10141f] relative ${!user.frame ? 'p-1 border-[4px] border-[#10141f] bg-gradient-to-br from-amber-300 to-yellow-600' : ''}`}>
+                <div className={`w-16 h-16 rounded-full bg-[#10141f] relative ${!user.frame ? 'p-1 border-[4px] border-[#10141f] bg-gradient-to-br from-amber-300 to-yellow-600' : ''}`}>
                    <img src={user.avatar} alt={user.name} className="w-full h-full rounded-full object-cover" />
                    
                    {/* VIP Frame */}

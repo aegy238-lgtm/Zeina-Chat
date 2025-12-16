@@ -274,7 +274,7 @@ export default function App() {
                    <div className="relative -mt-10 mb-4 flex justify-between items-end">
                       <div className="relative">
                          {/* Adjusted container: no border/padding if frame exists */}
-                         <div className={`w-20 h-20 rounded-full bg-slate-950 relative ${!user.frame ? 'p-1 border-4 border-slate-800' : ''}`}>
+                         <div className={`w-16 h-16 rounded-full bg-slate-950 relative ${!user.frame ? 'p-1 border-4 border-slate-800' : ''}`}>
                             <img src={user.avatar} className="w-full h-full rounded-full object-cover" alt="Me" />
                             {user.frame && (
                                <img src={user.frame} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[135%] h-[135%] object-contain pointer-events-none drop-shadow-lg z-20" alt="Frame" />

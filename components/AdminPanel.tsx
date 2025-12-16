@@ -290,8 +290,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               </motion.div>
             )}
 
-            {/* ... other tabs ... */}
-            
+            {/* Store Tab (Keeping it from previous turn) */}
             {activeTab === 'store' && (
                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                   {/* Header */}
@@ -446,7 +445,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                </motion.div>
             )}
 
-            {/* Other existing tabs... (Adding them back if needed but focusing on changes) */}
+            {/* Users Tab */}
             {activeTab === 'users' && (
                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
                   <div className="flex gap-2 mb-2">
@@ -507,10 +506,202 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                </motion.div>
             )}
-             {/* ... Repeat other tabs content blocks like 'rooms', 'vip', 'gifts', 'settings' if you want full file integrity, 
-                 but for this XML format I focused on the 'store' tab addition and necessary state/props. 
-                 Assuming the previous content for other tabs remains or is rendered based on activeTab state logic provided previously. 
-             */}
+
+            {/* VIP Tab */}
+            {activeTab === 'vip' && (
+               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  <h3 className="font-bold text-white flex items-center gap-2 mb-4">
+                     <Crown size={20} className="text-amber-500" /> إدارة مستويات VIP
+                  </h3>
+                  
+                  {editingVip && (
+                     <div className="bg-slate-800 p-4 rounded-2xl mb-4 border border-amber-500/30">
+                        <div className="flex justify-between mb-4">
+                           <h4 className="font-bold text-amber-400">تعديل المستوى {editingVip.level}</h4>
+                           <button onClick={() => setEditingVip(null)}><X size={16}/></button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                           <div>
+                              <label className="text-xs text-slate-400">اسم اللقب</label>
+                              <input 
+                                 className="w-full bg-slate-900 border border-white/10 rounded p-2 text-sm mt-1"
+                                 value={editingVip.name}
+                                 onChange={(e) => setEditingVip({...editingVip, name: e.target.value})}
+                              />
+                           </div>
+                           <div>
+                              <label className="text-xs text-slate-400">التكلفة</label>
+                              <input 
+                                 type="number"
+                                 className="w-full bg-slate-900 border border-white/10 rounded p-2 text-sm mt-1"
+                                 value={editingVip.cost}
+                                 onChange={(e) => setEditingVip({...editingVip, cost: Number(e.target.value)})}
+                              />
+                           </div>
+                           <div className="col-span-2">
+                              <label className="text-xs text-slate-400">رفع صورة الإطار</label>
+                              <input type="file" onChange={handleVipImageUpload} className="block w-full text-xs text-slate-400 mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-slate-700 file:text-white hover:file:bg-slate-600"/>
+                           </div>
+                        </div>
+                        <button onClick={handleSaveVip} className="mt-4 bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold w-full">حفظ التغييرات</button>
+                     </div>
+                  )}
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                     {vipLevels.map(vip => (
+                        <div key={vip.level} className="bg-slate-900 p-3 rounded-xl border border-white/5 relative group cursor-pointer hover:border-amber-500/50" onClick={() => setEditingVip(vip)}>
+                           <div className="absolute top-2 left-2 text-[10px] text-slate-500">Lv.{vip.level}</div>
+                           <div className="flex justify-center mb-2 mt-2">
+                              <div className="w-16 h-16 relative">
+                                 <div className="w-12 h-12 bg-slate-800 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></div>
+                                 <img src={vip.frameUrl} className="w-full h-full object-contain relative z-10" />
+                              </div>
+                           </div>
+                           <div className="text-center">
+                              <h4 className={`font-bold text-sm ${vip.color}`}>{vip.name}</h4>
+                              <p className="text-xs text-yellow-500 font-mono">{vip.cost.toLocaleString()}</p>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </motion.div>
+            )}
+
+            {/* Gifts Tab */}
+            {activeTab === 'gifts' && (
+               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  <div className="flex justify-between items-center mb-4">
+                     <h3 className="font-bold text-white flex items-center gap-2">
+                        <GiftIcon size={20} className="text-pink-500" /> إدارة الهدايا
+                     </h3>
+                     <button onClick={handleCreateNewGift} className="bg-pink-600 hover:bg-pink-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
+                        <Plus size={14} /> إضافة هدية
+                     </button>
+                  </div>
+
+                  {editingGift && (
+                     <div className="bg-slate-800 p-4 rounded-2xl mb-4 border border-pink-500/30">
+                        <div className="flex justify-between mb-4">
+                           <h4 className="font-bold text-pink-400">تعديل الهدية</h4>
+                           <button onClick={() => setEditingGift(null)}><X size={16}/></button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                           <div>
+                              <label className="text-xs text-slate-400">اسم الهدية</label>
+                              <input 
+                                 className="w-full bg-slate-900 border border-white/10 rounded p-2 text-sm mt-1"
+                                 value={editingGift.name}
+                                 onChange={(e) => setEditingGift({...editingGift, name: e.target.value})}
+                              />
+                           </div>
+                           <div>
+                              <label className="text-xs text-slate-400">السعر</label>
+                              <input 
+                                 type="number"
+                                 className="w-full bg-slate-900 border border-white/10 rounded p-2 text-sm mt-1"
+                                 value={editingGift.cost}
+                                 onChange={(e) => setEditingGift({...editingGift, cost: Number(e.target.value)})}
+                              />
+                           </div>
+                           <div>
+                              <label className="text-xs text-slate-400">نوع الحركة</label>
+                              <select 
+                                 className="w-full bg-slate-900 border border-white/10 rounded p-2 text-sm mt-1"
+                                 value={editingGift.animationType}
+                                 onChange={(e) => setEditingGift({...editingGift, animationType: e.target.value as any})}
+                              >
+                                 <option value="pop">عادي (Pop)</option>
+                                 <option value="fly">طيران (Fly)</option>
+                                 <option value="full-screen">شاشة كاملة (Full)</option>
+                              </select>
+                           </div>
+                           <div>
+                              <label className="text-xs text-slate-400">رفع أيقونة</label>
+                              <input type="file" onChange={handleGiftImageUpload} className="block w-full text-xs text-slate-400 mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-slate-700 file:text-white hover:file:bg-slate-600"/>
+                           </div>
+                        </div>
+                        <div className="flex gap-2 mt-4">
+                           <button onClick={() => handleDeleteGift(editingGift.id)} className="bg-red-500/20 text-red-400 px-4 py-2 rounded-lg text-xs font-bold">حذف</button>
+                           <button onClick={handleSaveGift} className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold">حفظ</button>
+                        </div>
+                     </div>
+                  )}
+
+                  <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                     {gifts.map(gift => (
+                        <div key={gift.id} className="bg-slate-900 p-3 rounded-xl border border-white/5 flex flex-col items-center cursor-pointer hover:border-pink-500/50" onClick={() => setEditingGift(gift)}>
+                           <div className="text-3xl mb-2">
+                              {gift.icon.startsWith('http') || gift.icon.startsWith('data:') ? <img src={gift.icon} className="w-8 h-8 object-contain"/> : gift.icon}
+                           </div>
+                           <h4 className="font-bold text-xs text-white">{gift.name}</h4>
+                           <p className="text-[10px] text-yellow-500 font-mono">{gift.cost}</p>
+                        </div>
+                     ))}
+                  </div>
+               </motion.div>
+            )}
+
+            {/* Rooms Tab */}
+            {activeTab === 'rooms' && (
+               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  <h3 className="font-bold text-white flex items-center gap-2 mb-4">
+                     <Radio size={20} className="text-cyan-500" /> إدارة الغرف
+                  </h3>
+                  <div className="space-y-3">
+                     {rooms.map(room => (
+                        <div key={room.id} className="bg-slate-900 p-4 rounded-xl border border-white/5 flex justify-between items-center">
+                           <div className="flex items-center gap-3">
+                              <img src={room.thumbnail} className="w-12 h-12 rounded-lg object-cover" />
+                              <div>
+                                 <h4 className="font-bold text-sm text-white">{room.title}</h4>
+                                 <p className="text-[10px] text-slate-400">ID: {room.id} | المالك: {room.speakers[0]?.name}</p>
+                              </div>
+                           </div>
+                           <div className="flex items-center gap-2">
+                              <div className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400">{room.category}</div>
+                              <button onClick={() => handleDeleteRoom(room.id)} className="p-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20">
+                                 <Trash2 size={16} />
+                              </button>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </motion.div>
+            )}
+
+            {/* Settings Tab */}
+            {activeTab === 'settings' && (
+               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  <h3 className="font-bold text-white flex items-center gap-2 mb-4">
+                     <Settings size={20} className="text-slate-400" /> إعدادات النظام
+                  </h3>
+                  <div className="bg-slate-900 p-6 rounded-2xl border border-white/5 space-y-6">
+                     <div className="flex justify-between items-center">
+                        <div>
+                           <h4 className="font-bold text-sm">حالة السيرفر</h4>
+                           <p className="text-xs text-slate-400">إيقاف/تشغيل الصيانة</p>
+                        </div>
+                        <div className="w-12 h-6 bg-green-500/20 rounded-full border border-green-500/50 relative cursor-pointer">
+                           <div className="absolute right-1 top-1 w-4 h-4 bg-green-500 rounded-full"></div>
+                        </div>
+                     </div>
+                     <div className="flex justify-between items-center">
+                        <div>
+                           <h4 className="font-bold text-sm">تسجيل الدخول للزوار</h4>
+                           <p className="text-xs text-slate-400">السماح للزوار بدخول الغرف</p>
+                        </div>
+                        <div className="w-12 h-6 bg-green-500/20 rounded-full border border-green-500/50 relative cursor-pointer">
+                           <div className="absolute right-1 top-1 w-4 h-4 bg-green-500 rounded-full"></div>
+                        </div>
+                     </div>
+                     <div className="border-t border-white/5 pt-4">
+                        <button className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+                           <Power size={18} /> إغلاق الطوارئ
+                        </button>
+                     </div>
+                  </div>
+               </motion.div>
+            )}
 
          </div>
       </div>
