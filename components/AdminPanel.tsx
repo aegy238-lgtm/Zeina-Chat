@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Users, Radio, Settings, X, Search, 
   MoreVertical, Ban, Trash2, ShieldAlert, CheckCircle, 
-  Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles, Clover, Shield, Mic, RotateCcw, UserX
+  Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles, Clover, Shield, Mic, RotateCcw, UserX, Star
 } from 'lucide-react';
 import { Room, User, UserLevel, VIPPackage, Gift, StoreItem, GameSettings, ItemType } from '../types';
 import { db } from '../services/firebase';
@@ -50,6 +50,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [selectedUserForIdChange, setSelectedUserForIdChange] = useState<any | null>(null);
   const [newIdValue, setNewIdValue] = useState('');
   const [isNewIdSpecial, setIsNewIdSpecial] = useState(false);
+
+  // State for VIP Management Logic
+  const [vipManageModalOpen, setVipManageModalOpen] = useState(false);
+  const [selectedUserForVip, setSelectedUserForVip] = useState<User | null>(null);
 
   // State for ID Search Logic
   const [idSearchModalOpen, setIdSearchModalOpen] = useState(false);
@@ -165,6 +169,55 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     setNewIdValue(user.customId ? user.customId.toString() : '');
     setIsNewIdSpecial(user.isSpecialId || false);
     setIdChangeModalOpen(true);
+  };
+
+  // VIP Management Logic
+  const openVipManageModal = (user: User) => {
+      setSelectedUserForVip(user);
+      setVipManageModalOpen(true);
+  };
+
+  const handleSetUserVip = async (vipPkg: VIPPackage | null) => {
+      if (!selectedUserForVip) return;
+
+      try {
+          if (vipPkg) {
+              // Grant VIP Confirmation
+              if (!confirm(`هل أنت متأكد من منح VIP مستوى "${vipPkg.name}" للمستخدم ${selectedUserForVip.name}؟\nسيتم تغيير الإطار ولون الاسم فوراً.`)) {
+                  return;
+              }
+
+              // Grant VIP Logic
+              // Updating frame and nameStyle ensures it shows up
+              await updateDoc(doc(db, "users", selectedUserForVip.id), {
+                  isVip: true,
+                  vipLevel: vipPkg.level,
+                  level: UserLevel.VIP,
+                  frame: vipPkg.frameUrl,
+                  nameStyle: vipPkg.nameStyle
+              });
+              alert(`تم منح ${vipPkg.name} للمستخدم بنجاح`);
+          } else {
+              // Revoke VIP Confirmation
+              if (!confirm(`تحذير: هل أنت متأكد من إزالة الـ VIP من المستخدم ${selectedUserForVip.name}؟\nسيعود المستخدم للحالة العادية وسيتم إزالة الإطار.`)) {
+                  return;
+              }
+
+              // Revoke VIP Logic
+              await updateDoc(doc(db, "users", selectedUserForVip.id), {
+                  isVip: false,
+                  vipLevel: 0,
+                  level: UserLevel.NEW, 
+                  frame: "", // Reset frame
+                  nameStyle: "" // Reset name style
+              });
+              alert("تم إزالة VIP من المستخدم بنجاح");
+          }
+          setVipManageModalOpen(false);
+      } catch (e) {
+          console.error(e);
+          alert("حدث خطأ أثناء تحديث حالة VIP");
+      }
   };
 
   const handleConfirmIdChange = async () => {
@@ -1033,6 +1086,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                           <Hash size={14} />
                                        </button>
 
+                                       {/* Manage VIP Button */}
+                                       <button 
+                                          onClick={() => openVipManageModal(u)} 
+                                          className="p-1.5 bg-amber-500/10 text-amber-400 rounded hover:bg-amber-500/20 flex items-center gap-1 font-bold"
+                                          title="إدارة VIP"
+                                       >
+                                          <Crown size={14} />
+                                       </button>
+
                                        {/* Delete Account Button */}
                                        {!u.isAdmin && (
                                           <button 
@@ -1213,6 +1275,66 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     >
                         حفظ التغييرات
                     </button>
+                </motion.div>
+            </div>
+        )}
+      </AnimatePresence>
+
+      {/* VIP Management Modal */}
+      <AnimatePresence>
+        {vipManageModalOpen && selectedUserForVip && (
+            <div className="absolute inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setVipManageModalOpen(false)}>
+                <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    className="bg-slate-900 w-full max-w-sm rounded-2xl border border-amber-500/30 shadow-2xl p-6"
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            <Crown className="text-amber-500" /> إدارة VIP
+                        </h3>
+                        <button onClick={() => setVipManageModalOpen(false)} className="text-slate-500 hover:text-white"><X size={20}/></button>
+                    </div>
+
+                    <div className="mb-4 text-center">
+                        <div className="w-16 h-16 rounded-full mx-auto mb-2 overflow-hidden border-2 border-slate-700">
+                            <img src={selectedUserForVip.avatar} className="w-full h-full object-cover" />
+                        </div>
+                        <h4 className="font-bold text-white">{selectedUserForVip.name}</h4>
+                        <p className="text-xs text-slate-400">
+                            الحالة الحالية: {selectedUserForVip.isVip ? `VIP (Lv.${selectedUserForVip.vipLevel})` : 'مستخدم عادي'}
+                        </p>
+                    </div>
+
+                    <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto pr-2 scrollbar-thin">
+                        <button 
+                            onClick={() => handleSetUserVip(null)}
+                            className="w-full p-3 rounded-xl bg-red-900/20 text-red-400 border border-red-500/20 hover:bg-red-900/40 text-xs font-bold flex items-center justify-center gap-2 transition-colors mb-2"
+                        >
+                            <Ban size={14} /> إزالة VIP نهائياً
+                        </button>
+                        
+                        {vipLevels.map(vip => (
+                            <button
+                                key={vip.level}
+                                onClick={() => handleSetUserVip(vip)}
+                                className={`w-full p-2.5 rounded-xl border flex items-center gap-3 transition-all ${
+                                    selectedUserForVip.vipLevel === vip.level 
+                                    ? 'bg-amber-500/20 border-amber-500 text-white' 
+                                    : 'bg-slate-800 border-white/5 text-slate-400 hover:bg-slate-700'
+                                }`}
+                            >
+                                <img src={vip.frameUrl} className="w-8 h-8 object-contain" />
+                                <div className="text-right flex-1">
+                                    <span className={`block text-xs font-bold ${vip.color}`}>{vip.name}</span>
+                                    <span className="text-[10px] opacity-70">Lv.{vip.level}</span>
+                                </div>
+                                {selectedUserForVip.vipLevel === vip.level && <CheckCircle size={16} className="text-green-500" />}
+                            </button>
+                        ))}
+                    </div>
                 </motion.div>
             </div>
         )}

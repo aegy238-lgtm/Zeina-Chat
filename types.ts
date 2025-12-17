@@ -28,8 +28,15 @@ export interface User {
   activeBubble?: string; // URL to active chat bubble image
   cover?: string; // Cover/Header image URL
   coins: number;
+  
+  // New Stats
+  wealth: number; // XP from sending gifts
+  charm: number;  // XP from receiving gifts
+  
   isVip: boolean;
   vipLevel?: number; // 1 to 12
+  nameStyle?: string; // CSS class for animated/colored name
+  
   bio?: string;
   gender?: 'male' | 'female';
   stats?: {
@@ -69,6 +76,7 @@ export interface VIPPackage {
   cost: number;
   frameUrl: string;
   color: string;
+  nameStyle: string; // CSS classes for the name effect
 }
 
 export interface ChatMessage {
@@ -76,6 +84,7 @@ export interface ChatMessage {
   userId: string;
   userName: string;
   userLevel: UserLevel;
+  userNameStyle?: string; // For VIP names in chat
   content: string;
   type: 'text' | 'gift' | 'system';
   giftData?: Gift;

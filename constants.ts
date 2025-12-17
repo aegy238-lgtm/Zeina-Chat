@@ -43,18 +43,18 @@ export const MOCK_CONTRIBUTORS: Contributor[] = [
 ];
 
 export const VIP_LEVELS: VIPPackage[] = [
-  { level: 1, name: 'فارس', cost: 1000, color: 'text-slate-300', frameUrl: 'https://cdn-icons-png.flaticon.com/512/763/763328.png' },
-  { level: 2, name: 'بارون', cost: 2500, color: 'text-emerald-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2503/2503728.png' },
-  { level: 3, name: 'فيكونت', cost: 5000, color: 'text-blue-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/3014/3014238.png' },
-  { level: 4, name: 'كونت', cost: 10000, color: 'text-indigo-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/1170/1170667.png' },
-  { level: 5, name: 'ماركيز', cost: 20000, color: 'text-purple-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/5407/5407986.png' },
-  { level: 6, name: 'دوق', cost: 40000, color: 'text-pink-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2545/2545603.png' },
-  { level: 7, name: 'أمير', cost: 75000, color: 'text-rose-500', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2622/2622080.png' },
-  { level: 8, name: 'ملك', cost: 150000, color: 'text-red-600', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2043/2043132.png' },
-  { level: 9, name: 'إمبراطور', cost: 300000, color: 'text-orange-500', frameUrl: 'https://cdn-icons-png.flaticon.com/512/5778/5778432.png' },
-  { level: 10, name: 'أسطورة', cost: 600000, color: 'text-amber-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2618/2618413.png' },
-  { level: 11, name: 'خرافي', cost: 1000000, color: 'text-yellow-300', frameUrl: 'https://cdn-icons-png.flaticon.com/512/4021/4021693.png' },
-  { level: 12, name: 'إلهي', cost: 2500000, color: 'text-white', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2165/2165039.png' },
+  { level: 1, name: 'فارس', cost: 1000, color: 'text-slate-300', frameUrl: 'https://cdn-icons-png.flaticon.com/512/763/763328.png', nameStyle: 'text-slate-200 font-bold' },
+  { level: 2, name: 'بارون', cost: 2500, color: 'text-emerald-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2503/2503728.png', nameStyle: 'text-emerald-400 font-bold' },
+  { level: 3, name: 'فيكونت', cost: 5000, color: 'text-blue-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/3014/3014238.png', nameStyle: 'text-blue-400 font-bold' },
+  { level: 4, name: 'كونت', cost: 10000, color: 'text-indigo-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/1170/1170667.png', nameStyle: 'text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-500 font-bold' },
+  { level: 5, name: 'ماركيز', cost: 20000, color: 'text-purple-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/5407/5407986.png', nameStyle: 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 font-bold' },
+  { level: 6, name: 'دوق', cost: 40000, color: 'text-pink-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2545/2545603.png', nameStyle: 'text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-rose-500 font-black' },
+  { level: 7, name: 'أمير', cost: 75000, color: 'text-rose-500', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2622/2622080.png', nameStyle: 'text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-red-600 font-black drop-shadow-sm' },
+  { level: 8, name: 'ملك', cost: 150000, color: 'text-red-600', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2043/2043132.png', nameStyle: 'text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600 font-black animate-pulse' },
+  { level: 9, name: 'إمبراطور', cost: 300000, color: 'text-orange-500', frameUrl: 'https://cdn-icons-png.flaticon.com/512/5778/5778432.png', nameStyle: 'text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-yellow-500 font-black animate-pulse drop-shadow-md' },
+  { level: 10, name: 'أسطورة', cost: 600000, color: 'text-amber-400', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2618/2618413.png', nameStyle: 'text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 font-black animate-[pulse_2s_infinite] drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]' },
+  { level: 11, name: 'خرافي', cost: 1000000, color: 'text-yellow-300', frameUrl: 'https://cdn-icons-png.flaticon.com/512/4021/4021693.png', nameStyle: 'text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-200 to-yellow-400 font-black animate-[bounce_3s_infinite]' },
+  { level: 12, name: 'إلهي', cost: 2500000, color: 'text-white', frameUrl: 'https://cdn-icons-png.flaticon.com/512/2165/2165039.png', nameStyle: 'text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 font-black drop-shadow-[0_0_10px_rgba(255,255,255,0.8)] animate-pulse' },
 ];
 
 export const CURRENT_USER: User = {
@@ -64,6 +64,8 @@ export const CURRENT_USER: User = {
   avatar: 'https://picsum.photos/200/200?random=99',
   level: UserLevel.SILVER,
   coins: 50000, 
+  wealth: 0,
+  charm: 0,
   isVip: false,
   vipLevel: 0,
   bio: 'أحب الشعر والسهر 🌙 | مصمم جرافيك',
@@ -101,9 +103,9 @@ export const MOCK_ROOMS: Room[] = [
     thumbnail: 'https://picsum.photos/400/300?random=1',
     background: 'linear-gradient(to bottom, #1e1b4b, #312e81)',
     speakers: [
-      { id: 'u1', customId: 10001, name: 'الملك', avatar: 'https://picsum.photos/200?random=1', level: UserLevel.DIAMOND, coins: 0, isVip: true, vipLevel: 10, frame: VIP_LEVELS[9].frameUrl, bio: 'المدير العام', stats: { likes: 9999, visitors: 50000, followers: 12000, following: 10 }, isFollowing: true, isMuted: false },
-      { id: 'u2', customId: 10002, name: 'سارة', avatar: 'https://picsum.photos/200?random=2', level: UserLevel.GOLD, coins: 0, isVip: false, bio: 'أجواء رايقة فقط ✨', stats: { likes: 300, visitors: 1200, followers: 500, following: 200 }, isFollowing: false, isMuted: false },
-      { id: 'u3', customId: 10003, name: 'أحمد', avatar: 'https://picsum.photos/200?random=3', level: UserLevel.SILVER, coins: 0, isVip: false, bio: 'محب للتقنية', stats: { likes: 50, visitors: 100, followers: 20, following: 50 }, isFollowing: false, isMuted: false },
+      { id: 'u1', customId: 10001, name: 'الملك', avatar: 'https://picsum.photos/200?random=1', level: UserLevel.DIAMOND, coins: 0, wealth: 50000, charm: 100000, isVip: true, vipLevel: 10, frame: VIP_LEVELS[9].frameUrl, nameStyle: VIP_LEVELS[9].nameStyle, bio: 'المدير العام', stats: { likes: 9999, visitors: 50000, followers: 12000, following: 10 }, isFollowing: true, isMuted: false },
+      { id: 'u2', customId: 10002, name: 'سارة', avatar: 'https://picsum.photos/200?random=2', level: UserLevel.GOLD, coins: 0, wealth: 5000, charm: 20000, isVip: false, bio: 'أجواء رايقة فقط ✨', stats: { likes: 300, visitors: 1200, followers: 500, following: 200 }, isFollowing: false, isMuted: false },
+      { id: 'u3', customId: 10003, name: 'أحمد', avatar: 'https://picsum.photos/200?random=3', level: UserLevel.SILVER, coins: 0, wealth: 1000, charm: 500, isVip: false, bio: 'محب للتقنية', stats: { likes: 50, visitors: 100, followers: 20, following: 50 }, isFollowing: false, isMuted: false },
     ]
   },
   {
@@ -115,8 +117,8 @@ export const MOCK_ROOMS: Room[] = [
     thumbnail: 'https://picsum.photos/400/300?random=2',
     background: 'linear-gradient(to bottom, #111827, #0f766e)',
     speakers: [
-      { id: 'u4', customId: 10004, name: 'GamerPro', avatar: 'https://picsum.photos/200?random=4', level: UserLevel.BRONZE, coins: 0, isVip: false, bio: 'Rank #1 Pubg', stats: { likes: 500, visitors: 2000, followers: 800, following: 50 }, isFollowing: false, isMuted: false },
-      { id: 'u5', customId: 10005, name: 'NoobMaster', avatar: 'https://picsum.photos/200?random=5', level: UserLevel.NEW, coins: 0, isVip: false, bio: 'New player', stats: { likes: 10, visitors: 50, followers: 5, following: 5 }, isFollowing: false, isMuted: false },
+      { id: 'u4', customId: 10004, name: 'GamerPro', avatar: 'https://picsum.photos/200?random=4', level: UserLevel.BRONZE, coins: 0, wealth: 0, charm: 0, isVip: false, bio: 'Rank #1 Pubg', stats: { likes: 500, visitors: 2000, followers: 800, following: 50 }, isFollowing: false, isMuted: false },
+      { id: 'u5', customId: 10005, name: 'NoobMaster', avatar: 'https://picsum.photos/200?random=5', level: UserLevel.NEW, coins: 0, wealth: 0, charm: 0, isVip: false, bio: 'New player', stats: { likes: 10, visitors: 50, followers: 5, following: 5 }, isFollowing: false, isMuted: false },
     ]
   },
   {
@@ -128,7 +130,7 @@ export const MOCK_ROOMS: Room[] = [
     thumbnail: 'https://picsum.photos/400/300?random=6',
     background: 'linear-gradient(to bottom, #450a0a, #7f1d1d)',
     speakers: [
-      { id: 'u6', customId: 10006, name: 'الشاعر', avatar: 'https://picsum.photos/200?random=6', level: UserLevel.VIP, coins: 0, isVip: true, vipLevel: 5, frame: VIP_LEVELS[4].frameUrl, bio: 'كلمات من القلب', stats: { likes: 2000, visitors: 6000, followers: 3000, following: 100 }, isFollowing: true, isMuted: false },
+      { id: 'u6', customId: 10006, name: 'الشاعر', avatar: 'https://picsum.photos/200?random=6', level: UserLevel.VIP, coins: 0, wealth: 15000, charm: 30000, isVip: true, vipLevel: 5, frame: VIP_LEVELS[4].frameUrl, nameStyle: VIP_LEVELS[4].nameStyle, bio: 'كلمات من القلب', stats: { likes: 2000, visitors: 6000, followers: 3000, following: 100 }, isFollowing: true, isMuted: false },
     ]
   }
 ];

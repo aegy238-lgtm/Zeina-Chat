@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { motion } from 'framer-motion';
 import { X, Check, Crown, Lock } from 'lucide-react';
@@ -45,21 +46,21 @@ const VIPModal: React.FC<VIPModalProps> = ({ user, vipLevels, onClose, onBuy }) 
         {/* List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
            {vipLevels.map((vip) => {
-             const isLocked = vip.level > (user.vipLevel || 0) + 1; // Example logic: open next level
-             const isOwned = (user.vipLevel || 0) >= vip.level;
+             // Logic: Check if this exact level is currently active
+             const isCurrentLevel = user.isVip && user.vipLevel === vip.level;
              const canAfford = user.coins >= vip.cost;
 
              return (
                <div 
                  key={vip.level} 
                  className={`relative rounded-2xl p-3 border transition-all overflow-hidden group ${
-                   isOwned 
-                     ? 'bg-amber-900/10 border-amber-500/50' 
+                   isCurrentLevel 
+                     ? 'bg-amber-900/20 border-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.2)]' 
                      : 'bg-slate-800/50 border-white/5 hover:border-white/10'
                  }`}
                >
-                 {/* Background Glow */}
-                 {isOwned && <div className="absolute inset-0 bg-amber-500/5"></div>}
+                 {/* Background Glow for Active */}
+                 {isCurrentLevel && <div className="absolute inset-0 bg-amber-500/5 animate-pulse"></div>}
 
                  <div className="flex items-center gap-4 relative z-10">
                     {/* Frame Preview */}
@@ -79,14 +80,18 @@ const VIPModal: React.FC<VIPModalProps> = ({ user, vipLevels, onClose, onBuy }) 
                     </div>
 
                     <div className="flex flex-col items-end gap-1">
-                       {isOwned ? (
+                       {isCurrentLevel ? (
                          <div className="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded-lg flex items-center gap-1 border border-green-500/20">
                             <Check size={12} /> مفعل
                          </div>
                        ) : (
                          <button 
                             disabled={!canAfford}
-                            onClick={() => onBuy(vip)}
+                            onClick={() => {
+                                if(confirm(`هل تريد شراء باقة ${vip.name} مقابل ${vip.cost.toLocaleString()} كوينز؟`)) {
+                                    onBuy(vip);
+                                }
+                            }}
                             className={`px-4 py-1.5 rounded-xl text-xs font-bold flex flex-col items-center min-w-[80px] transition-all active:scale-95 ${
                                canAfford 
                                  ? 'bg-gradient-to-r from-amber-500 to-yellow-600 text-black shadow-lg shadow-amber-900/50 hover:brightness-110' 

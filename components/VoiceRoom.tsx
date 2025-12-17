@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Room, User, ChatMessage, Gift, UserLevel, GameSettings } from '../types';
 import { CURRENT_USER } from '../constants';
-import { Mic, MicOff, Gift as GiftIcon, X, Send, Heart, Crown, Shield, Lock, Check, LayoutGrid, Gamepad2, Settings, ChevronDown, Clover, Repeat } from 'lucide-react';
+import { Mic, MicOff, Gift as GiftIcon, X, Send, Heart, Crown, Shield, Lock, Check, LayoutGrid, Gamepad2, Settings, ChevronDown, Clover, Repeat, Gem, RotateCcw, AlertTriangle } from 'lucide-react';
 import { generateSimulatedChat, generateSystemAnnouncement } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
 import UserProfileSheet from './UserProfileSheet';
@@ -13,7 +13,7 @@ import GameCenterModal from './GameCenterModal';
 import RoomSettingsModal from './RoomSettingsModal';
 import WinStrip from './WinStrip';
 import { db } from '../services/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit, updateDoc, doc, increment } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit, updateDoc, doc, increment, getDoc } from 'firebase/firestore';
 
 interface VoiceRoomProps {
   room: Room;
@@ -80,12 +80,12 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
   // --- FIREBASE SYNC: Seats Logic with seatIndex ---
   useEffect(() => {
-     // Only sync if we suspect the local state is stale or on initial load
-     // But essentially, we map the speakers to the seats array
+     // Ensure seats array reflects the latest room.speakers data
      const newSeats = new Array(8).fill(null);
      
      if (room.speakers && Array.isArray(room.speakers)) {
         room.speakers.forEach((speaker, idx) => {
+           // Use seatIndex if available, otherwise fallback to array index
            const pos = (speaker.seatIndex !== undefined && speaker.seatIndex !== null) ? speaker.seatIndex : idx;
            if (pos < 8) newSeats[pos] = speaker;
         });
@@ -133,6 +133,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
             }
         }
 
+        // Update in Firestore
         const updatedSpeakers = room.speakers.map(s => {
            if (s.id === currentUser.id) return { ...s, isMuted: isMuted };
            return s;
@@ -190,6 +191,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
       userId: currentUser.id,
       userName: currentUser.name,
       userLevel: currentUser.level,
+      userNameStyle: currentUser.nameStyle || '', // Pass the name style for chat
       content: inputValue,
       type: 'text',
       bubbleUrl: currentUser.activeBubble || '',
@@ -225,11 +227,55 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
        }
     }
 
-    // 3. Update Balance (Deduct Cost + Add Refund if Won) directly in DB
+    const finalRecipientId = recipientId || giftRecipientId;
+
     try {
+        // --- 1. Update User Documents (Balances) ---
+        // Update Sender: Deduct Coins, Increase Wealth
         await updateDoc(doc(db, "users", currentUser.id), {
-            coins: increment(refundAmount - totalCost)
+            coins: increment(refundAmount - totalCost),
+            wealth: increment(totalCost)
         });
+
+        // Update Recipient: Increase Charm (if specific recipient)
+        if (finalRecipientId) {
+           await updateDoc(doc(db, "users", finalRecipientId), {
+               charm: increment(totalCost)
+           });
+        }
+
+        // --- 2. CRITICAL: Update Room Speakers Array (Real-time Visuals) ---
+        // We need to fetch the latest room state to ensure we don't overwrite other changes
+        // and update the speakers array with new Wealth/Charm values so the numbers change instantly.
+        const roomRef = doc(db, "rooms", room.id);
+        const roomSnap = await getDoc(roomRef);
+        
+        if (roomSnap.exists()) {
+            const currentSpeakers = roomSnap.data().speakers as User[];
+            
+            const updatedSpeakers = currentSpeakers.map(s => {
+                const speakerCopy = { ...s }; // Shallow copy
+                
+                // Update Sender Stats in Room
+                if (s.id === currentUser.id) {
+                    speakerCopy.wealth = (speakerCopy.wealth || 0) + totalCost;
+                    // If sending to self, also update charm
+                    if (finalRecipientId === currentUser.id) {
+                        speakerCopy.charm = (speakerCopy.charm || 0) + totalCost;
+                    }
+                }
+                
+                // Update Recipient Stats in Room (if not self, handled above)
+                if (finalRecipientId && s.id === finalRecipientId && s.id !== currentUser.id) {
+                    speakerCopy.charm = (speakerCopy.charm || 0) + totalCost;
+                }
+                
+                return speakerCopy;
+            });
+
+            await updateDoc(roomRef, { speakers: updatedSpeakers });
+        }
+
     } catch(e) { console.error("Gift Transaction Failed", e); return; }
 
     // Handle Lucky Win Visuals
@@ -243,8 +289,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     
     // Determine recipient name
     let recipientName = 'الجميع';
-    const finalRecipientId = recipientId || giftRecipientId; 
-    
     if (finalRecipientId) {
        const targetUser = seats.find(s => s?.id === finalRecipientId);
        if (targetUser) recipientName = targetUser.name;
@@ -263,6 +307,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
       userId: currentUser.id,
       userName: currentUser.name,
       userLevel: currentUser.level,
+      userNameStyle: currentUser.nameStyle || '',
       content: content,
       type: 'gift',
       giftData: gift,
@@ -302,58 +347,118 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     } else {
       // Empty Seat logic
       if (amISitting) {
-          // --- MOVE SEAT LOGIC ---
+          // --- MOVE SEAT LOGIC (Seamless) ---
+          
           // 1. Optimistic UI Update: Move instantly locally
           const updatedSeats = [...seats];
           const oldIndex = seats.findIndex(s => s?.id === currentUser.id);
+          
+          // Get current user object with potentially updated stats
+          const myUserObj = oldIndex !== -1 ? updatedSeats[oldIndex] : currentUser;
+          
           if (oldIndex !== -1) updatedSeats[oldIndex] = null; // Clear old
-          const myOptimisticUser = { ...currentUser, seatIndex: index };
-          updatedSeats[index] = myOptimisticUser; // Set new
-          setSeats(updatedSeats);
+          updatedSeats[index] = { ...myUserObj!, seatIndex: index }; // Set new
+          setSeats(updatedSeats); // RENDER INSTANTLY
           addToast("تم تغيير المقعد", "success");
 
           // 2. Background Firebase Update
-          const updatedSpeakers = room.speakers.map(s => {
-              if (s.id === currentUser.id) {
-                  return { ...s, seatIndex: index }; 
-              }
-              return s;
-          });
-          
-          updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers }).catch(err => {
-             console.error("Move Seat Error", err);
-             // Revert logic could go here if strict consistency is needed
-          });
+          // We must fetch latest room data to avoid overwriting other people's data
+          try {
+             const roomRef = doc(db, "rooms", room.id);
+             const roomSnap = await getDoc(roomRef);
+             if (roomSnap.exists()) {
+                 const currentSpeakers = roomSnap.data().speakers as User[];
+                 const updatedSpeakers = currentSpeakers.map(s => {
+                     if (s.id === currentUser.id) {
+                         return { ...s, seatIndex: index }; 
+                     }
+                     return s;
+                 });
+                 await updateDoc(roomRef, { speakers: updatedSpeakers });
+             }
+          } catch(e) { 
+              console.error(e);
+              // Revert logic could be added here if needed
+          }
 
       } else {
-          // --- TAKE SEAT LOGIC ---
-          // 1. Optimistic UI Update: Sit instantly locally
+          // --- TAKE SEAT LOGIC (Optimistic) ---
+          
+          // 1. Optimistic UI
           const newSpeaker = { ...currentUser, isMuted: false, seatIndex: index }; 
           const updatedSeats = [...seats];
           updatedSeats[index] = newSpeaker;
-          setSeats(updatedSeats); // RENDER INSTANTLY
+          setSeats(updatedSeats);
 
-          // 2. Background Firebase Update
-          const updatedSpeakers = [...room.speakers, newSpeaker];
-          updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers }).catch(err => {
-             console.error("Seat Error", err);
-          });
+          // 2. Background Update
+          // Need to fetch fresh user data including VIP frame before taking seat
+          const userRef = doc(db, "users", currentUser.id);
+          const userSnap = await getDoc(userRef);
+          const freshUserData = userSnap.exists() ? { id: userSnap.id, ...userSnap.data() } as User : currentUser;
+
+          const newSpeakerData = { ...freshUserData, isMuted: false, seatIndex: index };
+          
+          try {
+             const roomRef = doc(db, "rooms", room.id);
+             const roomSnap = await getDoc(roomRef);
+             if (roomSnap.exists()) {
+                 const currentSpeakers = roomSnap.data().speakers as User[];
+                 // Prevent duplicates check
+                 if (!currentSpeakers.some(s => s.id === currentUser.id)) {
+                     await updateDoc(roomRef, { speakers: [...currentSpeakers, newSpeakerData] });
+                 }
+             }
+          } catch(e) { console.error(e); }
       }
     }
   };
   
   // Custom leave seat function
   const handleLeaveSeat = async () => {
-      // 1. Optimistic UI Update: Remove instantly locally
+      // Optimistic remove
       const updatedSeats = seats.map(s => s?.id === currentUser.id ? null : s);
       setSeats(updatedSeats);
-      addToast("تم النزول من المايك", "success");
-
-      // 2. Background Firebase Update
+      
       const updatedSpeakers = room.speakers.filter(s => s.id !== currentUser.id);
       updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers }).catch(err => {
          console.error("Leave Seat Error", err);
       });
+  };
+
+  const handleResetCounters = async () => {
+      const amISitting = room.speakers.some(s => s.id === currentUser.id);
+      if (!amISitting) {
+          addToast("يجب أن تكون على المايك لتصفير العداد", "error");
+          return;
+      }
+
+      if (confirm("هل أنت متأكد من تصفير عداد الكاريزما (تحت المايك)؟")) {
+          try {
+              const updatedSpeakers = room.speakers.map(s => {
+                  if (s.id === currentUser.id) {
+                      return { ...s, wealth: 0, charm: 0 };
+                  }
+                  return s;
+              });
+              
+              // Optimistic UI Update
+              const myIndex = seats.findIndex(s => s?.id === currentUser.id);
+              if (myIndex !== -1) {
+                  const newSeats = [...seats];
+                  if (newSeats[myIndex]) {
+                      newSeats[myIndex] = { ...newSeats[myIndex]!, wealth: 0, charm: 0 };
+                      setSeats(newSeats);
+                  }
+              }
+
+              await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
+              addToast("تم تصفير الكاريزما بنجاح", "success");
+              setShowMenuModal(false);
+          } catch(e) {
+              console.error(e);
+              addToast("حدث خطأ أثناء التصفير", "error");
+          }
+      }
   };
 
   const handleProfileAction = async (action: string, payload?: any) => {
@@ -384,6 +489,18 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     }
   };
 
+  const handleSafeLeave = () => {
+      // Logic for Host: Confirm Deletion
+      if (room.hostId === currentUser.id) {
+          if (confirm("⚠️ تحذير: بصفتك المضيف، الخروج سيؤدي إلى إغلاق الغرفة نهائياً وطرد جميع المستخدمين.\n\nهل أنت متأكد من الخروج؟")) {
+              onLeave();
+          }
+      } else {
+          // Logic for Guests
+          onLeave();
+      }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col" style={{ background: room.background }}>
       <Toast toasts={toasts} onRemove={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
@@ -399,9 +516,9 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
       <div className="flex justify-between items-center p-4 pt-8 bg-gradient-to-b from-black/60 to-transparent">
          <div className="flex items-center gap-2">
             <button 
-               onClick={onLeave} 
+               onClick={handleSafeLeave}
                className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-full hover:bg-red-500/20 hover:text-red-400 backdrop-blur-md transition-colors"
-               title="خروج نهائي"
+               title={room.hostId === currentUser.id ? "إغلاق الغرفة" : "خروج"}
             >
                <X size={18} />
             </button>
@@ -481,7 +598,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
       {/* Speakers Grid - 8 Seats */}
       <div className="flex-1 px-4 overflow-y-auto mt-2">
-         <div className="grid grid-cols-4 gap-x-2 gap-y-6">
+         <div className="grid grid-cols-4 gap-x-2 gap-y-8">
             {seats.map((speaker, index) => (
                <div key={index} className="flex flex-col items-center gap-1 relative">
                   <button 
@@ -520,10 +637,18 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                               <div className="absolute inset-0 rounded-full border-2 border-green-500/50 animate-ping opacity-0"></div>
                            )}
                            <div className="absolute -bottom-5 w-full flex justify-center z-30">
-                             <span className="text-[9px] text-white bg-black/40 backdrop-blur-sm px-2 rounded-full truncate max-w-[120%] border border-white/5">
+                             {/* Name Display - Uses VIP Style if available */}
+                             <span className={`text-[9px] bg-black/40 backdrop-blur-sm px-2 rounded-full truncate max-w-[120%] border border-white/5 ${speaker.nameStyle ? speaker.nameStyle : 'text-white'}`}>
                                {speaker.name}
                              </span>
                            </div>
+                           
+                           {/* Charisma (Charm) Indicator Badge Under Mic - As requested */}
+                           <div className="absolute -bottom-9 flex items-center justify-center gap-1 bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-sm scale-75 border border-white/10 shadow-lg z-20">
+                              <Heart size={10} className="text-pink-500" fill="currentColor" />
+                              <span className="text-[10px] text-white font-bold font-mono">{(speaker.charm || 0).toLocaleString()}</span>
+                           </div>
+
                         </div>
                      ) : (
                         <div className="relative w-full h-full flex items-center justify-center rounded-full bg-slate-800/40 border-2 border-dashed border-slate-600 hover:border-amber-500/50 hover:bg-slate-800 transition-all">
@@ -554,7 +679,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                           ? 'bg-gradient-to-r from-green-900/90 to-emerald-800/90 border-green-500 shadow-[0_0_10px_rgba(0,255,0,0.3)]' 
                           : 'bg-gradient-to-r from-purple-900/80 to-pink-900/80 border-purple-500/30'
                      }`}>
-                        <span className="text-xs font-bold text-amber-400">{msg.userName}:</span>
+                        <span className={`text-xs font-bold ${msg.userNameStyle ? msg.userNameStyle : 'text-amber-400'}`}>{msg.userName}:</span>
                         <div className="flex flex-col items-start">
                             <span className="text-xs text-white opacity-90">{msg.content.replace(`${msg.userName}:`, '')}</span>
                             {msg.isLuckyWin && (
@@ -580,7 +705,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                            {msg.userLevel}
                         </div>
                         <div className="flex flex-col items-start">
-                           <span className="text-[10px] text-slate-400 font-medium px-1 mb-0.5">{msg.userName}</span>
+                           <span className={`text-[10px] font-medium px-1 mb-0.5 ${msg.userNameStyle ? msg.userNameStyle : 'text-slate-400'}`}>{msg.userName}</span>
                            <div 
                               className={`rounded-2xl rounded-tr-none px-3 py-2 text-sm text-white shadow-sm transition-colors ${!msg.bubbleUrl ? 'bg-white/10 backdrop-blur-sm border border-white/5 hover:bg-white/15' : ''}`}
                               style={msg.bubbleUrl ? { 
@@ -732,6 +857,20 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                             </div>
                             <span className="font-bold text-sm text-white">إعدادات الغرفة</span>
                         </button>
+
+                        {/* Reset Counters Button (If sitting) */}
+                        {room.speakers.some(s => s.id === currentUser.id) && (
+                           <button 
+                              onClick={handleResetCounters}
+                              className="bg-slate-800 hover:bg-slate-700 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 active:scale-95 transition-all col-span-2 relative group overflow-hidden"
+                           >
+                              <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-400 group-hover:bg-red-500/30 transition-colors">
+                                 <RotateCcw size={24} />
+                              </div>
+                              <span className="font-bold text-sm text-white">تصفير العداد (الكاريزما)</span>
+                              <div className="text-[9px] text-slate-400">يعيد تعيين الرقم تحت المايك للصفر</div>
+                           </button>
+                        )}
                     </div>
                  </motion.div>
              </div>

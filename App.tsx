@@ -15,7 +15,7 @@ import { MOCK_ROOMS, VIP_LEVELS, GIFTS as INITIAL_GIFTS, STORE_ITEMS, MOCK_CONTR
 import { Room, User, VIPPackage, UserLevel, Gift, StoreItem, GameSettings } from './types';
 import { AnimatePresence } from 'framer-motion';
 import { db, auth } from './services/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, setDoc, getDoc, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, setDoc, getDoc, getDocs, writeBatch, deleteDoc, increment } from 'firebase/firestore';
 import { onAuthStateChanged, signOut, deleteUser } from 'firebase/auth';
 
 // --- CONFIGURATION ---
@@ -72,6 +72,8 @@ export default function App() {
                 avatar: authUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.uid}`,
                 level: UserLevel.NEW,
                 coins: 500, // Sign up bonus
+                wealth: 0,
+                charm: 0,
                 isVip: false,
                 vipLevel: 0,
                 bio: 'مستخدم جديد',
@@ -86,6 +88,10 @@ export default function App() {
          } else {
             // Existing User: Update Admin status if needed
             const userData = userSnap.data() as User;
+            // Ensure wealth/charm fields exist for old users
+            if (userData.wealth === undefined) userData.wealth = 0;
+            if (userData.charm === undefined) userData.charm = 0;
+            
             if (shouldBeAdmin && !userData.isAdmin) {
                 await updateDoc(userRef, { isAdmin: true });
                 setUser({ ...userData, isAdmin: true });
@@ -154,6 +160,25 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Watch for current room deletion (Auto-Kick Guests)
+  useEffect(() => {
+      if (currentRoom) {
+          const roomExists = rooms.find(r => r.id === currentRoom.id);
+          if (!roomExists) {
+              // Room was deleted remotely (likely by host)
+              setCurrentRoom(null);
+              setIsRoomMinimized(false);
+              addToast("تم إغلاق الغرفة من قبل المضيف", "info");
+          } else {
+              // Update local room data if needed (e.g. speakers changed)
+              // We rely on VoiceRoom internal listeners mostly, but this ensures App state is somewhat fresh
+              if (JSON.stringify(roomExists.speakers) !== JSON.stringify(currentRoom.speakers)) {
+                  setCurrentRoom(roomExists);
+              }
+          }
+      }
+  }, [rooms]); // Dependency on rooms array updates
 
   // 2. Listen to Current User (if logged in)
   useEffect(() => {
@@ -248,23 +273,37 @@ export default function App() {
     
     try {
        await updateDoc(doc(db, "rooms", room.id), {
-          listeners: (room.listeners || 0) + 1
+          listeners: increment(1)
        });
     } catch (e) { console.error(e); }
   };
 
+  // --- MODIFIED ROOM LEAVE LOGIC (HANDLES DELETION) ---
   const handleRoomLeave = async () => {
     if (currentRoom && user) {
-       try {
-           await updateDoc(doc(db, "rooms", currentRoom.id), {
-               listeners: Math.max(0, (currentRoom.listeners || 1) - 1)
-           });
-           
-           const updatedSpeakers = currentRoom.speakers.filter(s => s.id !== user.id);
-           if (updatedSpeakers.length !== currentRoom.speakers.length) {
-              await updateDoc(doc(db, "rooms", currentRoom.id), { speakers: updatedSpeakers });
+       // CHECK: Is the user the Host?
+       if (currentRoom.hostId === user.id) {
+           try {
+               // DELETE THE ROOM IF HOST LEAVES
+               await deleteDoc(doc(db, "rooms", currentRoom.id));
+               addToast("تم إغلاق الغرفة وإنهاء البث", 'success');
+           } catch (e) {
+               console.error("Error deleting room", e);
+               addToast("حدث خطأ أثناء إغلاق الغرفة", 'error');
            }
-       } catch (e) { console.error(e); }
+       } else {
+           // GUEST LEAVE LOGIC
+           try {
+               await updateDoc(doc(db, "rooms", currentRoom.id), {
+                   listeners: increment(-1)
+               });
+               
+               const updatedSpeakers = currentRoom.speakers.filter(s => s.id !== user.id);
+               if (updatedSpeakers.length !== currentRoom.speakers.length) {
+                  await updateDoc(doc(db, "rooms", currentRoom.id), { speakers: updatedSpeakers });
+               }
+           } catch (e) { console.error(e); }
+       }
     }
     setCurrentRoom(null);
     setIsRoomMinimized(false);
@@ -322,11 +361,13 @@ export default function App() {
      if (!user) return;
      if (user.coins >= pkg.cost) {
         try {
+           // Include nameStyle from the package
            await updateDoc(doc(db, "users", user.id), {
               coins: user.coins - pkg.cost,
               isVip: true,
               vipLevel: pkg.level,
               frame: pkg.frameUrl,
+              nameStyle: pkg.nameStyle, // Apply the shiny name
               level: UserLevel.VIP 
            });
            addToast(`مبروك! تم تفعيل عضوية ${pkg.name} بنجاح`, 'success');
@@ -656,7 +697,7 @@ export default function App() {
                    </div>
 
                    <div className="mb-6">
-                      <h2 className="text-2xl font-bold flex items-center gap-2">
+                      <h2 className={`text-2xl flex items-center gap-2 ${user.nameStyle ? user.nameStyle : 'font-bold'}`}>
                          {user.name}
                          <span className="bg-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-black">Lv.{user.level}</span>
                          {user.isAdmin && (

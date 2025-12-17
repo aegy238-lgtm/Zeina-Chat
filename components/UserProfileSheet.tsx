@@ -19,6 +19,24 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user, onClose, isCu
     onAction('copyId');
   };
 
+  // Helper to calculate Level based on XP
+  // Formula: Level = sqrt(XP / 500)
+  const calculateLevelInfo = (xp: number) => {
+      const xpPerLevel = 2500; // XP needed for level 1
+      // Simple linear-ish progression for demo
+      // Level 0: 0-2500
+      // Level 1: 2500-5000 etc.
+      // Better curve: Level = 1 + floor(xp / 2500)
+      const level = 1 + Math.floor(xp / xpPerLevel);
+      const currentLevelStart = (level - 1) * xpPerLevel;
+      const nextLevelStart = level * xpPerLevel;
+      const progress = ((xp - currentLevelStart) / xpPerLevel) * 100;
+      return { level, progress, nextLevelStart, current: xp };
+  };
+
+  const wealthInfo = calculateLevelInfo(user.wealth || 0);
+  const charmInfo = calculateLevelInfo(user.charm || 0);
+
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center pointer-events-none">
       {/* Backdrop */}
@@ -108,8 +126,8 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user, onClose, isCu
 
           {/* User Info */}
           <div className="mb-6">
-             <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-2xl font-bold text-white">{user.name}</h2>
+             <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h2 className={`text-2xl ${user.nameStyle ? user.nameStyle : 'font-bold text-white'}`}>{user.name}</h2>
                 <div className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                    user.level === UserLevel.VIP ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-black' : 
                    user.level === UserLevel.DIAMOND ? 'bg-gradient-to-r from-cyan-400 to-blue-600 text-white' :
@@ -156,32 +174,35 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user, onClose, isCu
           </div>
 
           {/* Progress Bars (Wealth/Charm) */}
-          <div className="space-y-3 mb-6">
+          <div className="space-y-4 mb-6">
+             {/* Wealth (Sending) */}
              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-orange-600 flex items-center justify-center text-white text-xs font-bold">
-                   Lv.12
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-400 to-orange-600 flex items-center justify-center text-white text-xs font-black shadow-lg shadow-orange-900/30">
+                   Lv.{wealthInfo.level}
                 </div>
                 <div className="flex-1">
                    <div className="flex justify-between text-[10px] text-slate-400 mb-1">
-                      <span className="text-amber-400 font-bold">ثراء</span>
-                      <span>12.5k / 50k</span>
+                      <span className="text-amber-400 font-bold flex items-center gap-1"><Gem size={10}/> ثراء (Wealth)</span>
+                      <span>{wealthInfo.current.toLocaleString()} / {wealthInfo.nextLevelStart.toLocaleString()}</span>
                    </div>
-                   <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full w-[25%] bg-gradient-to-r from-yellow-400 to-orange-500"></div>
+                   <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden border border-white/5">
+                      <div className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 shadow-[0_0_10px_rgba(251,191,36,0.5)]" style={{ width: `${wealthInfo.progress}%` }}></div>
                    </div>
                 </div>
              </div>
+
+             {/* Charm (Receiving) */}
              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-pink-600 flex items-center justify-center text-white text-xs font-bold">
-                   Lv.8
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-600 flex items-center justify-center text-white text-xs font-black shadow-lg shadow-pink-900/30">
+                   Lv.{charmInfo.level}
                 </div>
                 <div className="flex-1">
                    <div className="flex justify-between text-[10px] text-slate-400 mb-1">
-                      <span className="text-pink-400 font-bold">جاذبية</span>
-                      <span>4.2k / 10k</span>
+                      <span className="text-pink-400 font-bold flex items-center gap-1"><Heart size={10}/> جاذبية (Charm)</span>
+                      <span>{charmInfo.current.toLocaleString()} / {charmInfo.nextLevelStart.toLocaleString()}</span>
                    </div>
-                   <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full w-[42%] bg-gradient-to-r from-purple-400 to-pink-500"></div>
+                   <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden border border-white/5">
+                      <div className="h-full bg-gradient-to-r from-purple-400 to-pink-500 shadow-[0_0_10px_rgba(236,72,153,0.5)]" style={{ width: `${charmInfo.progress}%` }}></div>
                    </div>
                 </div>
              </div>
