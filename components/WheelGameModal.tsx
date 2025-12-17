@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Trophy, Volume2, VolumeX, History, Coins } from 'lucide-react';
 import { WHEEL_ITEMS } from '../constants';
 import { WheelItem } from '../types';
+import WinStrip from './WinStrip';
 
 interface WheelGameModalProps {
   isOpen: boolean;
@@ -29,6 +31,7 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
   const [history, setHistory] = useState<WheelItem[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [winner, setWinner] = useState<WheelItem | null>(null);
+  const [totalWinAmount, setTotalWinAmount] = useState(0);
   
   useEffect(() => {
      if (history.length === 0) {
@@ -61,10 +64,11 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
     else if (status === GameStatus.RESULT) {
        const resetTimeout = setTimeout(() => {
           setWinner(null);
+          setTotalWinAmount(0);
           setBets({});
           setTimeLeft(15);
           setStatus(GameStatus.BETTING);
-       }, 4000);
+       }, 5000); // Increased result time to enjoy the strip
        return () => clearTimeout(resetTimeout);
     }
 
@@ -86,7 +90,11 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
        
        if (bets[winningItem.id]) {
           const winAmount = bets[winningItem.id] * winningItem.multiplier;
+          // Just win amount for display logic, or total returned? Usually strip shows profit.
+          setTotalWinAmount(winAmount); 
           onUpdateCoins(userCoins + winAmount + bets[winningItem.id]); 
+       } else {
+          setTotalWinAmount(0);
        }
        
     }, 7000);
@@ -119,6 +127,11 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
         className="relative w-full max-w-[400px] bg-[#1a0b2e] rounded-[30px] border-[3px] border-amber-500 shadow-[0_0_60px_rgba(124,58,237,0.5)] overflow-hidden flex flex-col"
         style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/stardust.png")' }}
       >
+         {/* Win Strip Overlay */}
+         {status === GameStatus.RESULT && totalWinAmount > 0 && (
+            <WinStrip amount={totalWinAmount} />
+         )}
+
          <div className="flex justify-between items-center p-3 bg-black/30 border-b border-white/5">
             <div className="flex gap-1 overflow-hidden h-8 items-center bg-black/40 rounded-full px-2 border border-white/10">
                <History size={14} className="text-slate-400 mr-1" />

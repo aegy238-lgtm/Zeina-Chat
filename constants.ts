@@ -1,3 +1,4 @@
+
 import { Gift, Room, User, UserLevel, VIPPackage, StoreItem, Contributor, WheelItem, SlotItem } from './types';
 
 // Mock frames using frame-like borders or transparent PNGs
@@ -84,6 +85,9 @@ export const GIFTS: Gift[] = [
   { id: '4', name: 'سيارة رياضية', icon: '🏎️', cost: 1000, animationType: 'fly' },
   { id: '5', name: 'تنين', icon: '🐉', cost: 5000, animationType: 'full-screen' },
   { id: '6', name: 'يخت', icon: '🛥️', cost: 3000, animationType: 'fly' },
+  // Lucky Gifts Examples
+  { id: 'lucky_1', name: 'صندوق الحظ', icon: '🎁', cost: 500, animationType: 'pop', isLucky: true },
+  { id: 'lucky_2', name: 'نرد ذهبي', icon: '🎲', cost: 100, animationType: 'pop', isLucky: true },
 ];
 
 export const MOCK_ROOMS: Room[] = [

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Home, User as UserIcon, Plus, Bell, Crown, Gem, Settings, ChevronRight, Edit3, Share2, LogOut, Shield, Database, ShoppingBag, Camera, Trophy, Flame, Sparkles } from 'lucide-react';
 import RoomCard from './components/RoomCard';
@@ -37,7 +38,9 @@ export default function App() {
   // Game Settings (Controlled by Admin)
   const [gameSettings, setGameSettings] = useState<GameSettings>({
      slotsWinRate: 35, // Default 35% win rate for Slots
-     wheelWinRate: 45 // Default 45% win rate for Wheel
+     wheelWinRate: 45, // Default 45% win rate for Wheel
+     luckyGiftWinRate: 30, // 30% Chance to trigger lucky gift win
+     luckyGiftRefundPercent: 200 // Return 2x the cost (200%) if won
   });
 
   const handleRoomJoin = (room: Room) => {
@@ -238,56 +241,49 @@ export default function App() {
         
         {/* Top Bar (Only show on Home/Rank) */}
         {activeTab !== 'profile' && (
-           <div className="p-4 flex justify-between items-center bg-[#0f172a]/80 backdrop-blur-md sticky top-0 z-30 border-b border-white/5">
+           <div className="p-4 flex justify-between items-center bg-[#0f172a]/80 backdrop-blur-md sticky top-0 z-30 border-b border-white/5 h-16">
               <div className="flex items-center gap-2">
                 <div className="bg-amber-500 rounded-lg p-1">
-                  <Crown size={18} className="text-white" />
+                  <Crown size={16} className="text-white" />
                 </div>
-                <h1 className="text-xl font-black text-white">صوت العرب</h1>
+                <h1 className="text-lg font-black text-white">صوت العرب</h1>
               </div>
               <div className="flex gap-3">
                  <button className="relative p-2 bg-slate-800 rounded-full hover:bg-slate-700 transition" onClick={() => addToast('لا توجد إشعارات جديدة', 'info')}>
-                    <Bell size={20} className="text-slate-300" />
-                    <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900"></span>
+                    <Bell size={18} className="text-slate-300" />
+                    <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-slate-900"></span>
                  </button>
               </div>
            </div>
         )}
 
         {/* Tabs Content */}
-        <div className="space-y-6">
+        <div className="space-y-4">
            {activeTab === 'home' && (
-              <div className="mt-2 space-y-6">
+              <div className="mt-2 space-y-3">
                  
-                 {/* Banner Section - UPLOAD REMOVED */}
+                 {/* Banner Section - Compact Version */}
                  <div className="px-4 relative group">
-                    <div className="relative w-full h-44 rounded-2xl overflow-hidden shadow-2xl border border-white/10">
+                    <div className="relative w-full h-28 rounded-2xl overflow-hidden shadow-lg border border-white/10">
                        <img src={bannerImage} className="w-full h-full object-cover transition-transform duration-700 hover:scale-105" alt="Event Banner" />
-                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-4">
-                          <div>
-                             <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full mb-1 inline-block animate-pulse">مباشر</span>
-                             <h3 className="font-bold text-lg text-white">حفل توزيع الجوائز الأسبوعي 🏆</h3>
-                             <p className="text-xs text-slate-300">انضم إلينا واحصل على جوائز قيمة!</p>
-                          </div>
-                       </div>
                     </div>
                  </div>
 
-                 {/* Top Contributors Section (Contribution) */}
+                 {/* Top Contributors Section (Compact) */}
                  <div className="px-4">
-                    <div className="flex justify-between items-center mb-3">
-                       <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                          <Trophy size={16} className="text-yellow-500" /> 
-                          كبار الداعمين (المساهمة)
+                    <div className="flex justify-between items-center mb-2">
+                       <h2 className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <Trophy size={14} className="text-yellow-500" /> 
+                          كبار الداعمين
                        </h2>
-                       <ChevronRight size={14} className="text-slate-500" />
+                       <ChevronRight size={12} className="text-slate-500" />
                     </div>
-                    <div className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 backdrop-blur-sm overflow-x-auto">
-                       <div className="flex gap-4 min-w-max">
+                    <div className="bg-slate-900/50 p-2 rounded-xl border border-white/5 backdrop-blur-sm overflow-x-auto">
+                       <div className="flex gap-3 min-w-max">
                           {MOCK_CONTRIBUTORS.map((contributor, idx) => (
-                             <div key={contributor.id} className="flex flex-col items-center gap-1.5 min-w-[70px]">
+                             <div key={contributor.id} className="flex flex-col items-center gap-1 min-w-[60px]">
                                 <div className="relative">
-                                   <div className={`w-14 h-14 rounded-full p-[2px] ${
+                                   <div className={`w-12 h-12 rounded-full p-[2px] ${
                                       idx === 0 ? 'bg-gradient-to-tr from-yellow-300 via-amber-500 to-yellow-600 shadow-lg shadow-amber-500/20' :
                                       idx === 1 ? 'bg-gradient-to-tr from-slate-300 to-slate-500' :
                                       idx === 2 ? 'bg-gradient-to-tr from-orange-300 to-orange-700' :
@@ -295,14 +291,13 @@ export default function App() {
                                    }`}>
                                       <img src={contributor.avatar} className="w-full h-full rounded-full object-cover border-2 border-slate-900" alt={contributor.name} />
                                    </div>
-                                   <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border-2 border-slate-900 text-white ${
+                                   <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border-2 border-slate-900 text-white ${
                                       idx === 0 ? 'bg-yellow-500' : idx === 1 ? 'bg-slate-400' : idx === 2 ? 'bg-orange-600' : 'bg-slate-700'
                                    }`}>
                                       {contributor.rank}
                                    </div>
                                 </div>
-                                <span className="text-[10px] font-bold text-white max-w-[70px] truncate">{contributor.name}</span>
-                                <span className="text-[9px] text-yellow-500 font-mono bg-yellow-500/10 px-1.5 py-0.5 rounded">{contributor.amount >= 1000 ? (contributor.amount/1000).toFixed(1) + 'k' : contributor.amount}</span>
+                                <span className="text-[9px] font-bold text-white max-w-[60px] truncate">{contributor.name}</span>
                              </div>
                           ))}
                        </div>
@@ -311,20 +306,20 @@ export default function App() {
 
                  {/* Active Rooms */}
                  <div className="px-4">
-                    <div className="flex justify-between items-center mb-3">
-                       <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                          <Flame size={16} className="text-orange-500" />
+                    <div className="flex justify-between items-center mb-2">
+                       <h2 className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <Flame size={14} className="text-orange-500" />
                           الغرف النشطة
                        </h2>
-                       <span className="text-xs text-slate-500">مشاهدة الكل</span>
+                       <span className="text-[10px] text-slate-500">الكل</span>
                     </div>
                     
-                    <div className="grid gap-3">
+                    <div className="grid gap-2.5">
                        {rooms.map(room => (
                           <RoomCard key={room.id} room={room} onClick={handleRoomJoin} />
                        ))}
                        {rooms.length === 0 && (
-                          <div className="text-center py-10 text-slate-500 border border-dashed border-white/10 rounded-xl">
+                          <div className="text-center py-8 text-slate-500 border border-dashed border-white/10 rounded-xl text-xs">
                              لا توجد غرف نشطة حالياً
                           </div>
                        )}

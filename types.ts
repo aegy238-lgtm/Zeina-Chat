@@ -1,3 +1,4 @@
+
 export enum UserLevel {
   NEW = 'جديد',
   BRONZE = 'برونزي',
@@ -56,6 +57,7 @@ export interface Gift {
   icon: string;
   cost: number;
   animationType: 'pop' | 'fly' | 'full-screen';
+  isLucky?: boolean; // New Flag for Lucky Gifts
 }
 
 export interface VIPPackage {
@@ -75,6 +77,8 @@ export interface ChatMessage {
   type: 'text' | 'gift' | 'system';
   giftData?: Gift;
   bubbleUrl?: string; // Custom bubble style
+  isLuckyWin?: boolean; // Did this message trigger a lucky win?
+  winAmount?: number;
 }
 
 export interface Room {
@@ -91,6 +95,8 @@ export interface Room {
 export interface GameSettings {
   slotsWinRate: number; // For Slots Game
   wheelWinRate: number; // For Wheel Game
+  luckyGiftWinRate: number; // Chance to trigger lucky return (0-100%)
+  luckyGiftRefundPercent: number; // Multiplier of cost returned (e.g., 500% for x5 win)
 }
 
 export interface WheelItem {

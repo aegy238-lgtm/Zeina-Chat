@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Room, User, ChatMessage, Gift, UserLevel, GameSettings } from '../types';
 import { CURRENT_USER } from '../constants';
-import { Mic, MicOff, Gift as GiftIcon, X, Send, Heart, Crown, Shield, Lock, Check, LayoutGrid, Gamepad2, Settings, ChevronDown } from 'lucide-react';
+import { Mic, MicOff, Gift as GiftIcon, X, Send, Heart, Crown, Shield, Lock, Check, LayoutGrid, Gamepad2, Settings, ChevronDown, Clover, Repeat } from 'lucide-react';
 import { generateSimulatedChat, generateSystemAnnouncement } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
 import UserProfileSheet from './UserProfileSheet';
@@ -10,6 +11,7 @@ import WheelGameModal from './WheelGameModal';
 import SlotsGameModal from './SlotsGameModal';
 import GameCenterModal from './GameCenterModal';
 import RoomSettingsModal from './RoomSettingsModal';
+import WinStrip from './WinStrip';
 
 interface VoiceRoomProps {
   room: Room;
@@ -24,6 +26,16 @@ interface VoiceRoomProps {
   isMuted: boolean;
   onToggleMute: () => void;
 }
+
+interface ComboState {
+  gift: Gift;
+  recipientId: string | null;
+  quantity: number;
+  timer: number;
+  active: boolean;
+}
+
+const GIFT_MULTIPLIERS = [1, 10, 20, 50, 99];
 
 const VoiceRoom: React.FC<VoiceRoomProps> = ({ 
   room, onLeave, onMinimize, currentUser, onUpdateUser, gifts, onEditProfile, gameSettings, onUpdateRoom, isMuted, onToggleMute 
@@ -50,7 +62,22 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
   const [activeGiftEffect, setActiveGiftEffect] = useState<Gift | null>(null);
   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null); // null means 'All'
+  const [selectedGiftQuantity, setSelectedGiftQuantity] = useState(1); // Default x1
   
+  // Lucky Gift Win Strip State
+  const [luckyWinAmount, setLuckyWinAmount] = useState<number>(0);
+  // Ref to hold the timeout ID for hiding the strip
+  const luckyWinTimeoutRef = useRef<any>(null);
+
+  // Combo Logic State
+  const [comboState, setComboState] = useState<ComboState>({
+     gift: gifts[0],
+     recipientId: null,
+     quantity: 1,
+     timer: 0,
+     active: false
+  });
+
   const [entranceBanner, setEntranceBanner] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null); // For Profile Sheet
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -117,6 +144,24 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     return () => clearInterval(interval);
   }, [messages, seats, room.title]);
 
+  // Combo Timer Countdown
+  useEffect(() => {
+     let interval: ReturnType<typeof setInterval>;
+     if (comboState.active && comboState.timer > 0) {
+        interval = setInterval(() => {
+           setComboState(prev => {
+              if (prev.timer <= 0.1) {
+                 return { ...prev, active: false, timer: 0 };
+              }
+              return { ...prev, timer: prev.timer - 0.1 };
+           });
+        }, 100);
+     } else if (comboState.timer <= 0) {
+        setComboState(prev => ({...prev, active: false}));
+     }
+     return () => clearInterval(interval);
+  }, [comboState.active, comboState.timer]);
+
   const addToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
      const id = Date.now().toString();
      setToasts(prev => [...prev, { id, message, type }]);
@@ -139,25 +184,64 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     setInputValue('');
   };
 
-  const handleSendGift = (gift: Gift) => {
+  const handleSendGift = (gift: Gift, quantity: number = 1, recipientId: string | null = null) => {
+    const totalCost = gift.cost * quantity;
+
     // 1. Check Balance
-    if (currentUser.coins < gift.cost) {
+    if (currentUser.coins < totalCost) {
       addToast('عذراً، رصيدك لا يكفي لإرسال هذه الهدية! 🪙', 'error');
+      // Stop combo if balance runs out
+      setComboState(prev => ({ ...prev, active: false }));
       return;
     }
 
-    // 2. Deduct Coins
+    // 2. Lucky Gift Logic Calculation
+    let refundAmount = 0;
+    let isLuckyWin = false;
+
+    if (gift.isLucky) {
+       // Run luck check for the batch (simplification: one check for the whole batch or sum of checks?)
+       // Let's do a check proportional to the batch size to simulate multiple throws
+       const chance = Math.random() * 100;
+       // Slightly increase chance for higher combos? No, keep it flat for fairness.
+       if (chance < gameSettings.luckyGiftWinRate) {
+           isLuckyWin = true;
+           refundAmount = Math.floor(totalCost * (gameSettings.luckyGiftRefundPercent / 100));
+       }
+    }
+
+    // 3. Update Balance (Deduct Cost + Add Refund if Won)
+    const newBalance = currentUser.coins - totalCost + refundAmount;
+    
     onUpdateUser({
       ...currentUser,
-      coins: currentUser.coins - gift.cost
+      coins: newBalance
     });
+
+    // Handle Lucky Win Visuals (Strip)
+    if (isLuckyWin) {
+       // Clear any existing timeout to prevent the strip from hiding if player wins again quickly
+       if (luckyWinTimeoutRef.current) {
+          clearTimeout(luckyWinTimeoutRef.current);
+       }
+
+       // Display Win Strip
+       setLuckyWinAmount(refundAmount);
+       
+       // Hide strip after 4 seconds (extended time)
+       luckyWinTimeoutRef.current = setTimeout(() => {
+          setLuckyWinAmount(0);
+       }, 4000);
+    }
 
     setShowGiftModal(false);
     
     // Determine recipient name
     let recipientName = 'الجميع';
-    if (giftRecipientId) {
-       const targetUser = seats.find(s => s?.id === giftRecipientId);
+    const finalRecipientId = recipientId || giftRecipientId; // Use passed ID (for combo) or state ID
+    
+    if (finalRecipientId) {
+       const targetUser = seats.find(s => s?.id === finalRecipientId);
        if (targetUser) recipientName = targetUser.name;
     }
 
@@ -165,16 +249,46 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     setActiveGiftEffect(gift);
     setTimeout(() => setActiveGiftEffect(null), 3000);
 
+    // Add Message
+    const content = quantity > 1 
+      ? `أرسل ${gift.name} x${quantity} إلى ${recipientName}` 
+      : `أرسل ${gift.name} إلى ${recipientName}`;
+
     setMessages([...messages, {
       id: Date.now().toString(),
       userId: currentUser.id,
       userName: currentUser.name,
       userLevel: currentUser.level,
-      content: `أرسل ${gift.name} إلى ${recipientName}`,
+      content: content,
       type: 'gift',
-      giftData: gift
+      giftData: gift,
+      isLuckyWin: isLuckyWin,
+      winAmount: refundAmount
     }]);
-    addToast(`تم إرسال ${gift.name} إلى ${recipientName}`, 'success');
+    
+    // Removed Toast Notification for sending gifts as requested
+    // if (!isLuckyWin) {
+    //     addToast(content, 'success');
+    // }
+
+    // 4. Activate Combo Button
+    setComboState({
+       gift: gift,
+       recipientId: finalRecipientId,
+       quantity: quantity,
+       timer: 3, // 3 Seconds
+       active: true
+    });
+  };
+
+  // Handler for Combo Button Click
+  const handleComboClick = () => {
+     if (comboState.active) {
+        // Reset timer
+        setComboState(prev => ({ ...prev, timer: 3 }));
+        // Send again
+        handleSendGift(comboState.gift, comboState.quantity, comboState.recipientId);
+     }
   };
 
   const handleSeatClick = (index: number) => {
@@ -252,6 +366,13 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col" style={{ background: room.background }}>
       <Toast toasts={toasts} onRemove={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
 
+      {/* Win Strip for Lucky Gifts */}
+      <AnimatePresence>
+         {luckyWinAmount > 0 && (
+            <WinStrip amount={luckyWinAmount} />
+         )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex justify-between items-center p-4 pt-8 bg-gradient-to-b from-black/60 to-transparent">
          <div className="flex items-center gap-2">
@@ -326,6 +447,11 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                  <h1 className="mt-8 text-5xl font-bold text-amber-400 drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] stroke-black">
                     {activeGiftEffect.name}
                  </h1>
+                 {activeGiftEffect.isLucky && (
+                     <div className="absolute -top-10 animate-bounce">
+                         <Clover size={64} className="text-green-500 drop-shadow-[0_0_10px_rgba(0,255,0,0.8)]" fill="currentColor" />
+                     </div>
+                 )}
               </div>
            </motion.div>
         )}
@@ -401,14 +527,26 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                         {msg.content}
                      </div>
                   ) : msg.type === 'gift' ? (
-                     <div className="bg-gradient-to-r from-purple-900/80 to-pink-900/80 border border-purple-500/30 rounded-full p-1 pr-3 pl-1 flex items-center gap-2 self-start animate-pulse">
+                     <div className={`rounded-full p-1 pr-3 pl-1 flex items-center gap-2 self-start animate-pulse border ${
+                        msg.isLuckyWin 
+                          ? 'bg-gradient-to-r from-green-900/90 to-emerald-800/90 border-green-500 shadow-[0_0_10px_rgba(0,255,0,0.3)]' 
+                          : 'bg-gradient-to-r from-purple-900/80 to-pink-900/80 border-purple-500/30'
+                     }`}>
                         <span className="text-xs font-bold text-amber-400">{msg.userName}:</span>
-                        <span className="text-xs text-white opacity-90">{msg.content.replace(`${msg.userName}:`, '')}</span>
-                        <div className="bg-white/20 rounded-full w-6 h-6 flex items-center justify-center text-sm overflow-hidden">
+                        <div className="flex flex-col items-start">
+                            <span className="text-xs text-white opacity-90">{msg.content.replace(`${msg.userName}:`, '')}</span>
+                            {msg.isLuckyWin && (
+                                <span className="text-[9px] text-green-400 font-bold">ربح {msg.winAmount} كوينز! 🍀</span>
+                            )}
+                        </div>
+                        <div className="bg-white/20 rounded-full w-6 h-6 flex items-center justify-center text-sm overflow-hidden relative">
                            {msg.giftData?.icon.startsWith('http') || msg.giftData?.icon.startsWith('data:') ? 
                               <img src={msg.giftData.icon} className="w-full h-full object-cover" /> : 
                               msg.giftData?.icon
                            }
+                           {msg.isLuckyWin && (
+                              <div className="absolute -top-1 -right-1 text-[8px]">🍀</div>
+                           )}
                         </div>
                      </div>
                   ) : (
@@ -485,6 +623,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
             <button 
                onClick={() => {
                   setGiftRecipientId(null); // Reset to 'All' default or nothing
+                  setSelectedGiftQuantity(1); // Reset qty
                   setShowGiftModal(true);
                }}
                className="w-10 h-10 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full text-white shadow-lg shadow-purple-900/50 flex items-center justify-center hover:scale-105 transition-transform active:scale-95"
@@ -493,6 +632,39 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
             </button>
          </div>
       </div>
+
+      {/* Combo Gift Button (Floating) */}
+      <AnimatePresence>
+         {comboState.active && (
+            <motion.button
+               initial={{ scale: 0, opacity: 0 }}
+               animate={{ scale: 1, opacity: 1 }}
+               exit={{ scale: 0, opacity: 0 }}
+               onClick={handleComboClick}
+               className="absolute bottom-28 left-4 z-50 flex flex-col items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 shadow-[0_0_20px_rgba(236,72,153,0.6)] border-4 border-white/20 active:scale-95 cursor-pointer"
+            >
+               {/* Progress Ring Background */}
+               <svg className="absolute inset-0 w-full h-full -rotate-90">
+                  <circle
+                     cx="32" cy="32" r="30"
+                     className="stroke-white/20 fill-none stroke-[4]"
+                  />
+                  <circle
+                     cx="32" cy="32" r="30"
+                     className="stroke-yellow-400 fill-none stroke-[4] transition-all duration-100 ease-linear"
+                     strokeDasharray="188"
+                     strokeDashoffset={188 - (188 * comboState.timer / 3)}
+                  />
+               </svg>
+               
+               <div className="relative z-10 flex flex-col items-center">
+                  <span className="text-[8px] font-bold text-white uppercase tracking-wider">Combo</span>
+                  <div className="text-lg font-black text-white leading-none">x{comboState.quantity}</div>
+                  <span className="text-[10px] text-yellow-300 font-bold">{comboState.timer.toFixed(1)}</span>
+               </div>
+            </motion.button>
+         )}
+      </AnimatePresence>
 
       {/* Menus and Modals */}
       
@@ -598,14 +770,22 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                   </div>
                   
                   {/* Gifts Grid */}
-                  <div className="grid grid-cols-3 gap-3 max-h-[40vh] overflow-y-auto">
+                  <div className="grid grid-cols-3 gap-3 max-h-[35vh] overflow-y-auto mb-4">
                      {gifts.map(gift => (
                         <button 
                            key={gift.id}
-                           onClick={() => handleSendGift(gift)}
+                           onClick={() => handleSendGift(gift, selectedGiftQuantity)}
                            className="flex flex-col items-center p-3 rounded-2xl bg-slate-800/50 hover:bg-slate-700 border border-transparent hover:border-amber-500/50 transition-all group relative overflow-hidden"
                         >
                            <div className="absolute inset-0 bg-gradient-to-b from-amber-500/0 to-amber-500/0 group-hover:to-amber-500/10 transition-all"></div>
+                           
+                           {/* Lucky Badge */}
+                           {gift.isLucky && (
+                               <div className="absolute top-1 right-1 text-green-500">
+                                   <Clover size={14} fill="currentColor" />
+                               </div>
+                           )}
+
                            <div className="w-12 h-12 mb-2 flex items-center justify-center filter drop-shadow-md group-hover:scale-110 transition-transform duration-300">
                               {gift.icon.startsWith('http') || gift.icon.startsWith('data:') ? 
                                  <img src={gift.icon} className="w-full h-full object-contain" alt={gift.name} /> : 
@@ -616,6 +796,26 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                            <span className="text-yellow-400 text-[10px] mt-1 bg-black/30 px-2 py-0.5 rounded-full">{gift.cost}</span>
                         </button>
                      ))}
+                  </div>
+
+                  {/* Quantity Selector */}
+                  <div className="flex items-center gap-2 border-t border-white/10 pt-4">
+                     <span className="text-xs text-slate-400 font-bold ml-2">الكمية:</span>
+                     <div className="flex-1 flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                        {GIFT_MULTIPLIERS.map(qty => (
+                           <button
+                              key={qty}
+                              onClick={() => setSelectedGiftQuantity(qty)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                 selectedGiftQuantity === qty 
+                                    ? 'bg-purple-600 border-purple-500 text-white shadow-lg' 
+                                    : 'bg-slate-800 border-white/10 text-slate-400 hover:bg-slate-700'
+                              }`}
+                           >
+                              x{qty}
+                           </button>
+                        ))}
+                     </div>
                   </div>
                </motion.div>
             </div>

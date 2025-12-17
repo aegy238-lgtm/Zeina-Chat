@@ -1,9 +1,10 @@
+
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Users, Radio, Settings, X, Search, 
   MoreVertical, Ban, Trash2, ShieldAlert, CheckCircle, 
-  Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles
+  Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles, Clover
 } from 'lucide-react';
 import { Room, User, UserLevel, VIPPackage, Gift, StoreItem, GameSettings, ItemType } from '../types';
 
@@ -118,15 +119,36 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleSearchAndOpenCharge = () => {
     if (!searchIdInput.trim()) return;
-    const foundUser = localUsers.find(
+    
+    // Attempt to find user locally
+    let foundUser = localUsers.find(
        u => u.id === searchIdInput || u.id === `u${searchIdInput}` || u.id === searchIdInput.replace('u', '')
     );
+
+    // If not found, simulate fetching from database (create mock user for demo)
+    if (!foundUser) {
+       const confirmCreate = confirm('المستخدم غير موجود في القائمة المحلية. هل تريد المتابعة كعملية شحن لمستخدم جديد/خارجي؟');
+       if (confirmCreate) {
+          foundUser = {
+             id: searchIdInput,
+             name: `مستخدم ${searchIdInput}`,
+             level: UserLevel.NEW,
+             coins: 0,
+             status: 'active',
+             ip: 'Unknown',
+             isSpecialId: false
+          };
+          // Add to local list to reflect changes immediately
+          setLocalUsers(prev => [...prev, foundUser!]);
+       } else {
+          return;
+       }
+    }
+
     if (foundUser) {
        setIdSearchModalOpen(false);
        setSearchIdInput('');
        openChargeModal(foundUser);
-    } else {
-       alert('لم يتم العثور على مستخدم بهذا المعرف (ID)');
     }
   };
 
@@ -180,10 +202,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           onUpdateUser({ ...currentUser, coins: currentUser.coins + amount });
        }
        setLocalUsers(prev => prev.map(u => u.id === selectedUserForCharge.id ? { ...u, coins: u.coins + amount } : u));
-       alert(`تم شحن ${amount} كوينز للمستخدم ${selectedUserForCharge.name} بنجاح!`);
+       alert(`تم شحن ${amount.toLocaleString()} كوينز للمستخدم ${selectedUserForCharge.name} بنجاح!\nالرصيد الجديد: ${(selectedUserForCharge.coins + amount).toLocaleString()} 🪙`);
        setChargeModalOpen(false);
        setSelectedUserForCharge(null);
        setChargeProof('');
+    } else {
+        alert("الرجاء إدخال مبلغ صحيح");
     }
   };
 
@@ -208,7 +232,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           name: editingGift.name!,
           cost: Number(editingGift.cost),
           icon: editingGift.icon || '🎁',
-          animationType: editingGift.animationType || 'pop'
+          animationType: editingGift.animationType || 'pop',
+          isLucky: editingGift.isLucky || false
        };
        setGifts(prev => [...prev, newGift]);
     }
@@ -398,6 +423,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                      {gifts.map((gift) => (
                         <div key={gift.id} className="bg-slate-900 p-4 rounded-xl border border-white/5 flex flex-col items-center gap-2 relative group">
+                           {gift.isLucky && (
+                              <div className="absolute top-0 right-0 z-0 text-white/10 -rotate-12">
+                                 <Clover size={60} />
+                              </div>
+                           )}
+                           
                            <button 
                               onClick={() => handleDeleteGift(gift.id)}
                               className="absolute top-2 left-2 p-2 bg-red-500/80 text-white rounded-lg hover:bg-red-600 opacity-100 transition-opacity z-10"
@@ -407,16 +438,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                            </button>
                            <button 
                               onClick={() => setEditingGift(gift)}
-                              className="absolute top-2 right-2 p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 opacity-100 transition-opacity"
+                              className="absolute top-2 right-2 p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 opacity-100 transition-opacity z-10"
                            >
                               <Edit2 size={14} />
                            </button>
                            
-                           <div className="w-12 h-12 flex items-center justify-center text-3xl my-2">
+                           <div className="w-12 h-12 flex items-center justify-center text-3xl my-2 relative z-0">
                               {gift.icon.startsWith('http') || gift.icon.startsWith('data:') ? <img src={gift.icon} className="w-full h-full object-contain" /> : gift.icon}
                            </div>
-                           <div className="text-center">
-                              <h4 className="font-bold text-sm text-white">{gift.name}</h4>
+                           <div className="text-center relative z-0">
+                              <h4 className="font-bold text-sm text-white flex items-center justify-center gap-1">
+                                 {gift.name}
+                                 {gift.isLucky && <Clover size={10} className="text-green-500" fill="currentColor" />}
+                              </h4>
                               <p className="text-yellow-400 font-bold text-xs">{gift.cost} 🪙</p>
                            </div>
                         </div>
@@ -493,6 +527,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                  <option value="full-screen">شاشة كاملة (Full Screen)</option>
                               </select>
                            </div>
+
+                           {/* Lucky Gift Toggle */}
+                           <div className="flex items-center gap-3 bg-slate-800 p-3 rounded-xl border border-white/5">
+                              <div 
+                                 onClick={() => setEditingGift({...editingGift, isLucky: !editingGift.isLucky})}
+                                 className={`w-10 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors ${editingGift.isLucky ? 'bg-green-500 justify-end' : 'bg-slate-600 justify-start'}`}
+                              >
+                                 <div className="w-4 h-4 rounded-full bg-white shadow-sm"></div>
+                              </div>
+                              <div className="flex-1">
+                                 <span className="text-sm font-bold text-white block flex items-center gap-1">هدية حظ (Lucky Gift) <Clover size={14} className="text-green-500" /></span>
+                                 <span className="text-[10px] text-slate-400 block">عند إرسالها، قد يربح المرسل كوينز</span>
+                              </div>
+                           </div>
+
                            <div className="flex gap-2 pt-2">
                               <button onClick={() => setEditingGift(null)} className="flex-1 bg-slate-700 py-2 rounded-lg text-sm">إلغاء</button>
                               <button onClick={handleSaveGift} className="flex-1 bg-pink-500 text-white py-2 rounded-lg text-sm font-bold">حفظ</button>
@@ -673,6 +722,47 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                               onChange={(e) => setGameSettings({...gameSettings, wheelWinRate: Number(e.target.value)})}
                               className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
                            />
+                        </div>
+                     </div>
+                     
+                     {/* Lucky Gift Settings */}
+                     <div className="p-4 bg-slate-950 rounded-xl border border-white/5 md:col-span-2">
+                        <div className="flex items-center gap-3 mb-4">
+                           <span className="text-2xl text-green-500"><Clover size={32} /></span>
+                           <div>
+                              <h4 className="font-bold text-white">إعدادات هدايا الحظ (Lucky Gifts)</h4>
+                              <p className="text-[10px] text-slate-400">التحكم في نسب الفوز والمردود عند إرسال هدايا الحظ</p>
+                           </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                           <div>
+                              <div className="flex justify-between items-center mb-2">
+                                 <label className="text-xs font-bold text-slate-300">نسبة فوز المستخدم (Win Rate)</label>
+                                 <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-500/20 text-green-400">
+                                    {gameSettings.luckyGiftWinRate}%
+                                 </span>
+                              </div>
+                              <input 
+                                 type="range" min="0" max="100" step="5"
+                                 value={gameSettings.luckyGiftWinRate}
+                                 onChange={(e) => setGameSettings({...gameSettings, luckyGiftWinRate: Number(e.target.value)})}
+                                 className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
+                              />
+                           </div>
+                           <div>
+                              <div className="flex justify-between items-center mb-2">
+                                 <label className="text-xs font-bold text-slate-300">نسبة المردود (Return Multiplier)</label>
+                                 <span className="px-2 py-0.5 rounded text-xs font-bold bg-yellow-500/20 text-yellow-400">
+                                    {gameSettings.luckyGiftRefundPercent}% (x{gameSettings.luckyGiftRefundPercent / 100})
+                                 </span>
+                              </div>
+                              <input 
+                                 type="range" min="0" max="1000" step="10"
+                                 value={gameSettings.luckyGiftRefundPercent}
+                                 onChange={(e) => setGameSettings({...gameSettings, luckyGiftRefundPercent: Number(e.target.value)})}
+                                 className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                              />
+                           </div>
                         </div>
                      </div>
                    </div>
@@ -880,7 +970,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                     <div className="space-y-4">
                        <div>
-                          <label className="text-xs text-slate-400 mb-1 block">أدخل المبلغ</label>
+                          <label className="text-xs text-slate-400 mb-1 block">أدخل مبلغ الشحن</label>
                           <input 
                              type="number" 
                              value={chargeAmount}
@@ -889,6 +979,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                              className="w-full bg-slate-800 border border-white/10 rounded-xl p-3 text-lg font-bold text-white focus:border-yellow-500 outline-none text-center"
                              autoFocus
                           />
+                          {/* New Balance Preview */}
+                          <div className="flex justify-between items-center bg-black/20 p-2 rounded-lg mt-2">
+                             <span className="text-xs text-slate-400">الرصيد بعد الشحن:</span>
+                             <span className="text-sm font-bold text-green-400">
+                                {(selectedUserForCharge.coins + (Number(chargeAmount) || 0)).toLocaleString()} 🪙
+                             </span>
+                          </div>
                        </div>
                        <div className="grid grid-cols-3 gap-2">
                           {[1000, 5000, 10000, 50000, 100000, 500000].map(amt => (

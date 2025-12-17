@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trophy, Volume2, VolumeX, RefreshCw, Coins } from 'lucide-react';
 import { SLOT_ITEMS } from '../constants';
 import { SlotItem } from '../types';
+import WinStrip from './WinStrip';
 
 interface SlotsGameModalProps {
   isOpen: boolean;
@@ -72,6 +74,11 @@ const SlotsGameModal: React.FC<SlotsGameModalProps> = ({ isOpen, onClose, userCo
         exit={{ scale: 0.8, opacity: 0 }}
         className="relative w-full max-w-[400px] bg-gradient-to-b from-purple-900 to-[#1a0b2e] rounded-[30px] border-[4px] border-pink-500 shadow-[0_0_60px_rgba(236,72,153,0.5)] overflow-hidden flex flex-col p-6"
       >
+        {/* Win Strip Overlay */}
+        <AnimatePresence>
+            {winAmount > 0 && <WinStrip amount={winAmount} />}
+        </AnimatePresence>
+
         <button onClick={onClose} className="absolute top-4 right-4 text-white/50 hover:text-white">
             <X size={24} />
         </button>
@@ -115,7 +122,7 @@ const SlotsGameModal: React.FC<SlotsGameModalProps> = ({ isOpen, onClose, userCo
                     initial={{ scale: 0 }} animate={{ scale: 1.2 }}
                     className="text-yellow-400 font-black text-2xl flex items-center gap-2 drop-shadow-[0_2px_2px_rgba(0,0,0,1)]"
                 >
-                    <Trophy className="text-yellow-500" /> فوز! +{winAmount}
+                    <Trophy className="text-yellow-500" /> فوز!
                 </motion.div>
             ) : (
                 <div className="text-slate-500 text-sm">حظاً أوفر...</div>
