@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trophy, Volume2, VolumeX, History, Coins } from 'lucide-react';
@@ -212,7 +213,9 @@ const FruitGameModal: React.FC<FruitGameModalProps> = ({ isOpen, onClose, userCo
                   )`
                }}
                animate={{ rotate: rotation }}
-               transition={{ duration: 7, ease: "cubicBezier(0.25, 1, 0.5, 1)" }} // 7 Seconds spin
+               // Fixed: Type '"cubicBezier(0.25, 1, 0.5, 1)"' is not assignable to type 'Easing | Easing[]'.
+               // Corrected to use cubic bezier numeric array.
+               transition={{ duration: 7, ease: [0.25, 1, 0.5, 1] }} // 7 Seconds spin
             >
                {/* Slices Content (Icons) */}
                {WHEEL_ITEMS.map((item, i) => {

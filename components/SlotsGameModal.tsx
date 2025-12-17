@@ -14,42 +14,43 @@ interface SlotsGameModalProps {
   winRate: number;
 }
 
-const CHIPS = [100, 500, 1000, 5000];
+// Updated Chips to include 20 Million
+const CHIPS = [10000, 1000000, 5000000, 20000000];
 
 const SlotsGameModal: React.FC<SlotsGameModalProps> = ({ isOpen, onClose, userCoins, onUpdateCoins, winRate }) => {
   const [spinning, setSpinning] = useState(false);
-  const [bet, setBet] = useState(100);
+  const [bet, setBet] = useState(10000);
   const [reels, setReels] = useState<SlotItem[]>([SLOT_ITEMS[0], SLOT_ITEMS[0], SLOT_ITEMS[0]]);
   const [winAmount, setWinAmount] = useState(0);
+
+  const formatValue = (val: number) => {
+      if (val >= 1000000) return (val / 1000000) + 'M';
+      if (val >= 1000) return (val / 1000) + 'K';
+      return val;
+  };
 
   const spin = () => {
     if (userCoins < bet || spinning) return;
     
     setSpinning(true);
     setWinAmount(0);
-    onUpdateCoins(userCoins - bet); // Deduct bet immediately
+    onUpdateCoins(userCoins - bet); 
 
-    // Animation Duration
     setTimeout(() => {
-        // Simple logic:
-        // winRate% chance to win something.
         const isWin = Math.random() * 100 < winRate;
         let finalReels: SlotItem[] = [];
 
         if (isWin) {
-            // Pick a random item to be the winner
             const item = SLOT_ITEMS[Math.floor(Math.random() * SLOT_ITEMS.length)];
             finalReels = [item, item, item];
             const payout = bet * item.multiplier;
             setWinAmount(payout);
             onUpdateCoins((userCoins - bet) + payout);
         } else {
-            // Force lose
             const r1 = SLOT_ITEMS[Math.floor(Math.random() * SLOT_ITEMS.length)];
             const r2 = SLOT_ITEMS[Math.floor(Math.random() * SLOT_ITEMS.length)];
             let r3 = SLOT_ITEMS[Math.floor(Math.random() * SLOT_ITEMS.length)];
             
-            // Ensure they don't accidentally match all 3
             while(r1.id === r2.id && r2.id === r3.id) {
                  r3 = SLOT_ITEMS[Math.floor(Math.random() * SLOT_ITEMS.length)];
             }
@@ -74,7 +75,6 @@ const SlotsGameModal: React.FC<SlotsGameModalProps> = ({ isOpen, onClose, userCo
         exit={{ scale: 0.8, opacity: 0 }}
         className="relative w-full max-w-[400px] bg-gradient-to-b from-purple-900 to-[#1a0b2e] rounded-[30px] border-[4px] border-pink-500 shadow-[0_0_60px_rgba(236,72,153,0.5)] overflow-hidden flex flex-col p-6"
       >
-        {/* Win Strip Overlay */}
         <AnimatePresence>
             {winAmount > 0 && <WinStrip amount={winAmount} />}
         </AnimatePresence>
@@ -90,9 +90,7 @@ const SlotsGameModal: React.FC<SlotsGameModalProps> = ({ isOpen, onClose, userCo
             <p className="text-xs text-pink-200/70">طابق 3 رموز للفوز!</p>
         </div>
 
-        {/* Reels Container */}
         <div className="bg-black/40 p-4 rounded-2xl border-2 border-pink-500/30 flex justify-between gap-2 mb-6 shadow-inner relative overflow-hidden">
-             {/* Payline */}
              <div className="absolute top-1/2 left-0 right-0 h-1 bg-red-500/50 z-10 pointer-events-none"></div>
 
              {[0, 1, 2].map((i) => (
@@ -115,7 +113,6 @@ const SlotsGameModal: React.FC<SlotsGameModalProps> = ({ isOpen, onClose, userCo
              ))}
         </div>
 
-        {/* Win Display */}
         <div className="h-12 mb-4 flex items-center justify-center">
             {winAmount > 0 ? (
                 <motion.div 
@@ -129,23 +126,22 @@ const SlotsGameModal: React.FC<SlotsGameModalProps> = ({ isOpen, onClose, userCo
             )}
         </div>
 
-        {/* Controls */}
         <div className="space-y-4">
              <div className="flex justify-between items-center bg-black/30 p-3 rounded-xl">
-                 <span className="text-slate-300 text-sm font-bold">مبلغ الرهان:</span>
-                 <div className="flex gap-2">
+                 <span className="text-slate-300 text-sm font-bold">الرهان:</span>
+                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                      {CHIPS.map(c => (
                          <button 
                             key={c}
                             onClick={() => setBet(c)}
                             disabled={spinning}
-                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                            className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${
                                 bet === c 
                                 ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/40' 
                                 : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
                             }`}
                          >
-                             {c}
+                             {formatValue(c)}
                          </button>
                      ))}
                  </div>

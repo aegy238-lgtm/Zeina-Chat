@@ -1,7 +1,8 @@
+
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
-const apiKey = process.env.API_KEY || ''; // In a real app, handle missing key gracefully
-const ai = new GoogleGenAI({ apiKey });
+// Fixed: Correct initialization using named parameters as per guidelines
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Circuit breaker state
 let isQuotaExceeded = false;
@@ -53,7 +54,7 @@ const getRandomFallback = () => FALLBACK_MESSAGES[Math.floor(Math.random() * FAL
  */
 export const generateSimulatedChat = async (roomTitle: string, lastMessages: string[]): Promise<string> => {
   // If no key or quota exceeded, return fallback immediately without calling API
-  if (!apiKey) return "مرحبا بكم في الغرفة!";
+  if (!process.env.API_KEY) return "مرحبا بكم في الغرفة!";
   if (!checkQuota()) return getRandomFallback();
   
   try {
@@ -66,8 +67,9 @@ export const generateSimulatedChat = async (roomTitle: string, lastMessages: str
       Keep it very short (max 6 words). E.g., "منورين", "يا هلا", "صوتك حلو", "شكرا على الهدية".
     `;
 
+    // Updated to use the recommended gemini-3-flash-preview model
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         maxOutputTokens: 20,
@@ -86,7 +88,7 @@ export const generateSimulatedChat = async (roomTitle: string, lastMessages: str
  * AI Assistant that welcomes high level users or comments on gifts.
  */
 export const generateSystemAnnouncement = async (action: string, userName: string): Promise<string> => {
-  if (!apiKey) return `${userName} ${action}`;
+  if (!process.env.API_KEY) return `${userName} ${action}`;
   if (!checkQuota()) return `${userName} ${action}`;
 
   try {
@@ -98,8 +100,9 @@ export const generateSystemAnnouncement = async (action: string, userName: strin
       Max 10 words.
     `;
     
+    // Updated to use the recommended gemini-3-flash-preview model
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
     

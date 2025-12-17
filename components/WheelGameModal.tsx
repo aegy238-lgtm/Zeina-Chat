@@ -14,7 +14,8 @@ interface WheelGameModalProps {
   winRate: number;
 }
 
-const CHIPS = [100, 1000, 10000, 100000];
+// Updated Chips to include 20 Million
+const CHIPS = [10000, 1000000, 5000000, 20000000];
 
 enum GameStatus {
   BETTING = 'betting', 
@@ -25,7 +26,7 @@ enum GameStatus {
 const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCoins, onUpdateCoins, winRate }) => {
   const [status, setStatus] = useState<GameStatus>(GameStatus.BETTING);
   const [timeLeft, setTimeLeft] = useState(15);
-  const [selectedChip, setSelectedChip] = useState(100);
+  const [selectedChip, setSelectedChip] = useState(10000);
   const [bets, setBets] = useState<Record<string, number>>({});
   const [rotation, setRotation] = useState(0);
   const [history, setHistory] = useState<WheelItem[]>([]);
@@ -68,7 +69,7 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
           setBets({});
           setTimeLeft(15);
           setStatus(GameStatus.BETTING);
-       }, 5000); // Increased result time to enjoy the strip
+       }, 5000); 
        return () => clearTimeout(resetTimeout);
     }
 
@@ -90,7 +91,6 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
        
        if (bets[winningItem.id]) {
           const winAmount = bets[winningItem.id] * winningItem.multiplier;
-          // Just win amount for display logic, or total returned? Usually strip shows profit.
           setTotalWinAmount(winAmount); 
           onUpdateCoins(userCoins + winAmount + bets[winningItem.id]); 
        } else {
@@ -111,6 +111,12 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
     }));
   };
 
+  const formatChipValue = (val: number) => {
+      if (val >= 1000000) return (val / 1000000) + 'M';
+      if (val >= 1000) return (val / 1000) + 'K';
+      return val;
+  };
+
   if (!isOpen) return null;
 
   const uniqueBetItems = Array.from(new Set(WHEEL_ITEMS.map(i => i.id)))
@@ -127,7 +133,6 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
         className="relative w-full max-w-[400px] bg-[#1a0b2e] rounded-[30px] border-[3px] border-amber-500 shadow-[0_0_60px_rgba(124,58,237,0.5)] overflow-hidden flex flex-col"
         style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/stardust.png")' }}
       >
-         {/* Win Strip Overlay */}
          {status === GameStatus.RESULT && totalWinAmount > 0 && (
             <WinStrip amount={totalWinAmount} />
          )}
@@ -188,7 +193,9 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
                   )`
                }}
                animate={{ rotate: rotation }}
-               transition={{ duration: 7, ease: "cubicBezier(0.25, 1, 0.5, 1)" }} 
+               // Fixed: Type '"cubicBezier(0.25, 1, 0.5, 1)"' is not assignable to type 'Easing | Easing[]'.
+               // Corrected to use cubic bezier numeric array.
+               transition={{ duration: 7, ease: [0.25, 1, 0.5, 1] }} 
             >
                {WHEEL_ITEMS.map((item, i) => {
                   const angle = (360 / WHEEL_ITEMS.length) * i + (360 / WHEEL_ITEMS.length) / 2;
@@ -242,7 +249,7 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
                        
                        {bets[item.id] > 0 && (
                           <div className="absolute top-1 right-1 bg-yellow-400 text-black text-[10px] font-bold px-1.5 rounded-full shadow-md animate-bounce">
-                             {bets[item.id] >= 1000 ? (bets[item.id]/1000).toFixed(0) + 'k' : bets[item.id]}
+                             {formatChipValue(bets[item.id])}
                           </div>
                        )}
                     </button>
@@ -275,7 +282,7 @@ const WheelGameModal: React.FC<WheelGameModalProps> = ({ isOpen, onClose, userCo
                           }}
                        >
                           <div className="w-[85%] h-[85%] rounded-full bg-slate-900 flex items-center justify-center border border-white/10 text-white">
-                             {chip >= 1000 ? (chip/1000) + 'K' : chip}
+                             {formatChipValue(chip)}
                           </div>
                        </button>
                     ))}

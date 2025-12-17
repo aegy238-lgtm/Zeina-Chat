@@ -51,6 +51,8 @@ export interface User {
   isSpecialId?: boolean; // New property for Special IDs
   isAdmin?: boolean; // New property for Admin Access
   seatIndex?: number; // Position on the mic (0-7)
+  // Added status to fix errors in AdminPanel where status property was accessed but not defined on User
+  status?: string;
 }
 
 export interface Contributor {
