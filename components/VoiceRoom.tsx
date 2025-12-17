@@ -66,6 +66,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const isAdmin = currentUser.isAdmin;
   const isOwner = currentUser.id === room.hostId;
 
+  // Sync speakers to local seats whenever room prop updates (External Sync)
   useEffect(() => {
      const newSeats = new Array(8).fill(null);
      if (room.speakers && Array.isArray(room.speakers)) {
@@ -190,6 +191,22 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
               content: isLuckyWin ? `ربح ${refundAmount.toLocaleString()} كوينز من ${gift.name}! 🍀` : `أرسل ${gift.name} x${quantity} إلى ${recipientName}`,
               type: 'gift', giftData: gift, isLuckyWin, winAmount: refundAmount, timestamp: serverTimestamp()
             });
+
+            // TRIGGER GLOBAL BANNER: Threshold is 5000 coins OR any Lucky Win
+            if (totalCost >= 5000 || isLuckyWin) {
+                await addDoc(collection(db, "global_announcements"), {
+                    senderName: currentUser.name,
+                    recipientName: recipientName,
+                    giftName: gift.name,
+                    giftIcon: gift.icon,
+                    roomTitle: room.title,
+                    roomId: room.id,
+                    type: isLuckyWin ? 'lucky_win' : 'gift',
+                    amount: isLuckyWin ? refundAmount : totalCost,
+                    timestamp: serverTimestamp()
+                });
+            }
+
         } catch(e) { console.error(e); }
     })();
   };
@@ -216,14 +233,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
         isMuted: false, seatIndex: index 
       };
 
-      const tempSeats = [...localSeats];
-      if (speakerEntry) {
-         const oldIdx = localSeats.findIndex(s => s?.id === currentUser.id);
-         if (oldIdx !== -1) tempSeats[oldIdx] = null;
-      }
-      tempSeats[index] = newSpeakerObj;
-      setLocalSeats(tempSeats);
-
       try {
         const roomRef = doc(db, "rooms", room.id);
         let updatedSpeakersList = room.speakers.filter(s => s.id !== currentUser.id);
@@ -249,12 +258,13 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     return g.cost < 1000 && !g.isLucky;
   }), [gifts, giftTab]);
 
+  // Dynamic Background: This line ensures the background updates for everyone instantly
   const bgStyle = room.background.startsWith('url') 
     ? { backgroundImage: room.background, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { background: room.background };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col" style={bgStyle}>
+    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col transition-all duration-700" style={bgStyle}>
       <Toast toasts={toasts} onRemove={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
       <AnimatePresence>{luckyWinAmount > 0 && <WinStrip amount={luckyWinAmount} />}</AnimatePresence>
 
@@ -425,7 +435,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                     <button onClick={() => { setShowMenuModal(false); setShowGameCenter(true); }} className="bg-slate-800 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 hover:bg-slate-700 transition-colors"><div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center text-green-400"><Gamepad2 size={24} /></div><span className="font-bold text-sm text-white">الألعاب</span></button>
                     
-                    {/* OWNER ONLY: ROOM SETTINGS */}
                     {isOwner && (
                       <button onClick={() => { setShowMenuModal(false); setShowSettingsModal(true); }} className="bg-slate-800 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 hover:bg-slate-700 transition-colors"><div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400"><Settings size={24} /></div><span className="font-bold text-sm text-white">إعدادات الروم</span></button>
                     )}

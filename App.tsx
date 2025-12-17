@@ -59,37 +59,48 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Listen for Global Announcements (Flying Banner)
+  // Listen for Global Announcements
   useEffect(() => {
     const q = query(collection(db, "global_announcements"), orderBy("timestamp", "desc"), limit(1));
     const unsub = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         const data = snapshot.docs[0].data() as GlobalAnnouncement;
-        // Only show if it's within the last 15 seconds to avoid re-showing old ones on refresh
         const announcementTime = data.timestamp?.toMillis() || Date.now();
         if (Date.now() - announcementTime < 15000) {
           setAnnouncement(data);
-          setTimeout(() => setAnnouncement(null), 8000); // Display duration
+          setTimeout(() => setAnnouncement(null), 8000);
         }
       }
     });
     return () => unsub();
   }, []);
 
-  // Sync Database Collections
+  // Sync Database Collections & Active Room Synchronization
   useEffect(() => {
     const unsubRooms = onSnapshot(collection(db, "rooms"), (snap) => {
-      setRooms(snap.docs.map(d => ({ id: d.id, ...d.data() } as Room)));
+      const fetchedRooms = snap.docs.map(d => ({ id: d.id, ...d.data() } as Room));
+      setRooms(fetchedRooms);
+
+      // CRITICAL: Synchronize currentRoom state with external changes (like background updates)
+      setCurrentRoom(prevRoom => {
+        if (!prevRoom) return null;
+        const updatedRoom = fetchedRooms.find(r => r.id === prevRoom.id);
+        // If the room still exists, update its state to trigger re-renders everywhere
+        return updatedRoom || null;
+      });
     });
+
     const unsubGifts = onSnapshot(collection(db, "gifts"), (snap) => {
       if (!snap.empty) {
         const fetchedGifts = snap.docs.map(d => ({ id: d.id, ...d.data() } as Gift));
         setGifts(fetchedGifts.length > 0 ? fetchedGifts : INITIAL_GIFTS);
       }
     });
+
     const unsubVIP = onSnapshot(collection(db, "vip_levels"), (snap) => {
       if (!snap.empty) setVipLevels(snap.docs.map(d => ({ ...d.data() } as VIPPackage)).sort((a,b) => a.level - b.level));
     });
+
     const unsubStore = onSnapshot(collection(db, "store_items"), (snap) => {
       if (!snap.empty) setStoreItems(snap.docs.map(d => ({ id: d.id, ...d.data() } as StoreItem)));
     });
@@ -205,7 +216,6 @@ export default function App() {
     <div className="h-[100dvh] w-full bg-[#0f172a] text-white relative md:max-w-md mx-auto shadow-2xl overflow-hidden flex flex-col font-cairo">
       <Toast toasts={toasts} onRemove={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
       
-      {/* Global Flying Banner */}
       <AnimatePresence>
         {announcement && <GlobalBanner announcement={announcement} />}
       </AnimatePresence>
