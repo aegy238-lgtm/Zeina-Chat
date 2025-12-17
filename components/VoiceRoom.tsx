@@ -80,12 +80,12 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
   // --- FIREBASE SYNC: Seats Logic with seatIndex ---
   useEffect(() => {
+     // Only sync if we suspect the local state is stale or on initial load
+     // But essentially, we map the speakers to the seats array
      const newSeats = new Array(8).fill(null);
      
      if (room.speakers && Array.isArray(room.speakers)) {
         room.speakers.forEach((speaker, idx) => {
-           // If speaker has specific index, use it. Otherwise use array index as fallback.
-           // This handles legacy data and new logic.
            const pos = (speaker.seatIndex !== undefined && speaker.seatIndex !== null) ? speaker.seatIndex : idx;
            if (pos < 8) newSeats[pos] = speaker;
         });
@@ -123,6 +123,16 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
      const isSpeaker = room.speakers.find(s => s.id === currentUser.id);
      
      if (isSpeaker && isSpeaker.isMuted !== isMuted) {
+        // Optimistic update for Mute Icon
+        const currentSeatIndex = seats.findIndex(s => s?.id === currentUser.id);
+        if (currentSeatIndex !== -1) {
+            const updatedSeats = [...seats];
+            if (updatedSeats[currentSeatIndex]) {
+               updatedSeats[currentSeatIndex] = { ...updatedSeats[currentSeatIndex]!, isMuted: isMuted };
+               setSeats(updatedSeats);
+            }
+        }
+
         const updatedSpeakers = room.speakers.map(s => {
            if (s.id === currentUser.id) return { ...s, isMuted: isMuted };
            return s;
@@ -293,39 +303,57 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
       // Empty Seat logic
       if (amISitting) {
           // --- MOVE SEAT LOGIC ---
-          // User wants to move from current seat to this new empty seat (index)
+          // 1. Optimistic UI Update: Move instantly locally
+          const updatedSeats = [...seats];
+          const oldIndex = seats.findIndex(s => s?.id === currentUser.id);
+          if (oldIndex !== -1) updatedSeats[oldIndex] = null; // Clear old
+          const myOptimisticUser = { ...currentUser, seatIndex: index };
+          updatedSeats[index] = myOptimisticUser; // Set new
+          setSeats(updatedSeats);
+          addToast("تم تغيير المقعد", "success");
+
+          // 2. Background Firebase Update
           const updatedSpeakers = room.speakers.map(s => {
               if (s.id === currentUser.id) {
-                  return { ...s, seatIndex: index }; // Update position
+                  return { ...s, seatIndex: index }; 
               }
               return s;
           });
           
-          try {
-             await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
-             addToast("تم تغيير المقعد", "success");
-          } catch(e) { console.error("Move Seat Error", e); }
+          updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers }).catch(err => {
+             console.error("Move Seat Error", err);
+             // Revert logic could go here if strict consistency is needed
+          });
 
       } else {
           // --- TAKE SEAT LOGIC ---
-          // User is not sitting, take this seat
+          // 1. Optimistic UI Update: Sit instantly locally
           const newSpeaker = { ...currentUser, isMuted: false, seatIndex: index }; 
+          const updatedSeats = [...seats];
+          updatedSeats[index] = newSpeaker;
+          setSeats(updatedSeats); // RENDER INSTANTLY
+
+          // 2. Background Firebase Update
           const updatedSpeakers = [...room.speakers, newSpeaker];
-          
-          try {
-             await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
-          } catch(e) { console.error("Seat Error", e); }
+          updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers }).catch(err => {
+             console.error("Seat Error", err);
+          });
       }
     }
   };
   
   // Custom leave seat function
   const handleLeaveSeat = async () => {
+      // 1. Optimistic UI Update: Remove instantly locally
+      const updatedSeats = seats.map(s => s?.id === currentUser.id ? null : s);
+      setSeats(updatedSeats);
+      addToast("تم النزول من المايك", "success");
+
+      // 2. Background Firebase Update
       const updatedSpeakers = room.speakers.filter(s => s.id !== currentUser.id);
-      try {
-         await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
-         addToast("تم النزول من المايك", "success");
-      } catch(e) { console.error(e); }
+      updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers }).catch(err => {
+         console.error("Leave Seat Error", err);
+      });
   };
 
   const handleProfileAction = async (action: string, payload?: any) => {
@@ -584,7 +612,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                        addToast("اضغط على مقعد فارغ للصعود", "info");
                    }
                }}
-               className={`w-12 h-12 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 active:scale-90 border-2 relative overflow-hidden group ${
+               className={`w-12 h-12 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 active:scale-95 border-2 relative overflow-hidden group ${
                   isMuted 
                     ? 'bg-slate-800 text-slate-400 border-slate-600' 
                     : 'bg-gradient-to-br from-green-500 to-emerald-600 text-white border-green-400 shadow-green-500/50'

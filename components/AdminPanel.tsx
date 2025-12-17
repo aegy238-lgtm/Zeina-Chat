@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Users, Radio, Settings, X, Search, 
   MoreVertical, Ban, Trash2, ShieldAlert, CheckCircle, 
-  Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles, Clover, Shield
+  Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles, Clover, Shield, Mic
 } from 'lucide-react';
 import { Room, User, UserLevel, VIPPackage, Gift, StoreItem, GameSettings, ItemType } from '../types';
 import { db } from '../services/firebase';
@@ -364,6 +364,67 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                  </div>
               </motion.div>
+            )}
+
+            {/* ROOMS MANAGEMENT TAB - ADDED HERE */}
+            {activeTab === 'rooms' && (
+               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  <div className="flex justify-between items-center mb-4">
+                     <h3 className="font-bold text-white flex items-center gap-2">
+                        <Radio size={20} className="text-orange-500" /> إدارة الغرف النشطة
+                     </h3>
+                     <div className="bg-slate-900 px-3 py-1 rounded-lg text-xs text-slate-400 border border-white/5">
+                        {rooms.length} غرفة نشطة
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {rooms.map((room) => (
+                        <div key={room.id} className="bg-slate-900 p-3 rounded-xl border border-white/5 flex gap-3 items-center group relative overflow-hidden">
+                           {/* Background Blur */}
+                           <div className="absolute inset-0 bg-gradient-to-r from-slate-900 to-transparent z-0"></div>
+                           <img src={room.thumbnail} className="absolute right-0 top-0 h-full w-1/2 object-cover opacity-10 z-0" />
+
+                           {/* Content */}
+                           <div className="w-16 h-16 rounded-lg bg-black overflow-hidden flex-shrink-0 relative z-10 border border-white/10">
+                              <img src={room.thumbnail} className="w-full h-full object-cover" />
+                           </div>
+
+                           <div className="flex-1 min-w-0 z-10">
+                              <h4 className="font-bold text-white text-sm truncate">{room.title}</h4>
+                              <p className="text-xs text-slate-400 font-mono">ID: {room.id}</p>
+                              <div className="flex items-center gap-3 mt-1">
+                                 <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20">
+                                    {room.category}
+                                 </span>
+                                 <span className="text-[10px] flex items-center gap-1 text-slate-400">
+                                    <Users size={10} /> {room.listeners}
+                                 </span>
+                                 <span className="text-[10px] flex items-center gap-1 text-green-400">
+                                    <Mic size={10} /> {room.speakers.length}
+                                 </span>
+                              </div>
+                           </div>
+
+                           {/* Delete Action */}
+                           <button 
+                              onClick={() => handleDeleteRoom(room.id)}
+                              className="p-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-600 hover:text-white transition z-10 border border-red-500/20"
+                              title="حذف الغرفة وإغلاقها"
+                           >
+                              <Trash2 size={18} />
+                           </button>
+                        </div>
+                     ))}
+                     
+                     {rooms.length === 0 && (
+                        <div className="col-span-full flex flex-col items-center justify-center py-12 text-slate-500 border-2 border-dashed border-white/5 rounded-2xl">
+                           <Radio size={40} className="mb-2 opacity-50" />
+                           <p className="text-sm">لا توجد غرف نشطة حالياً</p>
+                        </div>
+                     )}
+                  </div>
+               </motion.div>
             )}
 
             {/* VIP Tab */}
