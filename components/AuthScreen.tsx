@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Mail, Lock, User, LogIn, Crown, AlertCircle } from 'lucide-react';
 import { auth, db } from '../services/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, runTransaction } from 'firebase/firestore';
 import { UserLevel } from '../types';
 
 const AuthScreen = () => {
@@ -33,11 +33,32 @@ const AuthScreen = () => {
         // Update Display Name
         await updateProfile(user, { displayName: name });
 
+        // --- SEQUENTIAL ID GENERATION ---
+        // We use a transaction to safely increment the counter
+        const counterRef = doc(db, "settings", "counters");
+        let newCustomId = 10000; // Fallback starting ID
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const counterDoc = await transaction.get(counterRef);
+                if (!counterDoc.exists()) {
+                    transaction.set(counterRef, { userIdCounter: 10000 });
+                    newCustomId = 10000;
+                } else {
+                    const currentCount = counterDoc.data().userIdCounter || 10000;
+                    newCustomId = currentCount + 1;
+                    transaction.update(counterRef, { userIdCounter: newCustomId });
+                }
+            });
+        } catch (e) {
+            console.error("Counter error, using random fallback", e);
+            newCustomId = Math.floor(10000 + Math.random() * 90000);
+        }
+
         // Create User Document in Firestore
-        // Note: The main logic for document creation is also handled in App.tsx just in case, 
-        // but doing it here ensures immediate data availability.
         const newUserDoc = {
             id: user.uid,
+            customId: newCustomId, // The nice sequential ID
             name: name,
             avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`, // Random Avatar
             level: UserLevel.NEW,

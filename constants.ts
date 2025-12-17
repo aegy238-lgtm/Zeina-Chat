@@ -59,6 +59,7 @@ export const VIP_LEVELS: VIPPackage[] = [
 
 export const CURRENT_USER: User = {
   id: 'me',
+  customId: 99999,
   name: 'ضيف كريم',
   avatar: 'https://picsum.photos/200/200?random=99',
   level: UserLevel.SILVER,
@@ -100,9 +101,9 @@ export const MOCK_ROOMS: Room[] = [
     thumbnail: 'https://picsum.photos/400/300?random=1',
     background: 'linear-gradient(to bottom, #1e1b4b, #312e81)',
     speakers: [
-      { id: 'u1', name: 'الملك', avatar: 'https://picsum.photos/200?random=1', level: UserLevel.DIAMOND, coins: 0, isVip: true, vipLevel: 10, frame: VIP_LEVELS[9].frameUrl, bio: 'المدير العام', stats: { likes: 9999, visitors: 50000, followers: 12000, following: 10 }, isFollowing: true, isMuted: false },
-      { id: 'u2', name: 'سارة', avatar: 'https://picsum.photos/200?random=2', level: UserLevel.GOLD, coins: 0, isVip: false, bio: 'أجواء رايقة فقط ✨', stats: { likes: 300, visitors: 1200, followers: 500, following: 200 }, isFollowing: false, isMuted: false },
-      { id: 'u3', name: 'أحمد', avatar: 'https://picsum.photos/200?random=3', level: UserLevel.SILVER, coins: 0, isVip: false, bio: 'محب للتقنية', stats: { likes: 50, visitors: 100, followers: 20, following: 50 }, isFollowing: false, isMuted: false },
+      { id: 'u1', customId: 10001, name: 'الملك', avatar: 'https://picsum.photos/200?random=1', level: UserLevel.DIAMOND, coins: 0, isVip: true, vipLevel: 10, frame: VIP_LEVELS[9].frameUrl, bio: 'المدير العام', stats: { likes: 9999, visitors: 50000, followers: 12000, following: 10 }, isFollowing: true, isMuted: false },
+      { id: 'u2', customId: 10002, name: 'سارة', avatar: 'https://picsum.photos/200?random=2', level: UserLevel.GOLD, coins: 0, isVip: false, bio: 'أجواء رايقة فقط ✨', stats: { likes: 300, visitors: 1200, followers: 500, following: 200 }, isFollowing: false, isMuted: false },
+      { id: 'u3', customId: 10003, name: 'أحمد', avatar: 'https://picsum.photos/200?random=3', level: UserLevel.SILVER, coins: 0, isVip: false, bio: 'محب للتقنية', stats: { likes: 50, visitors: 100, followers: 20, following: 50 }, isFollowing: false, isMuted: false },
     ]
   },
   {
@@ -114,8 +115,8 @@ export const MOCK_ROOMS: Room[] = [
     thumbnail: 'https://picsum.photos/400/300?random=2',
     background: 'linear-gradient(to bottom, #111827, #0f766e)',
     speakers: [
-      { id: 'u4', name: 'GamerPro', avatar: 'https://picsum.photos/200?random=4', level: UserLevel.BRONZE, coins: 0, isVip: false, bio: 'Rank #1 Pubg', stats: { likes: 500, visitors: 2000, followers: 800, following: 50 }, isFollowing: false, isMuted: false },
-      { id: 'u5', name: 'NoobMaster', avatar: 'https://picsum.photos/200?random=5', level: UserLevel.NEW, coins: 0, isVip: false, bio: 'New player', stats: { likes: 10, visitors: 50, followers: 5, following: 5 }, isFollowing: false, isMuted: false },
+      { id: 'u4', customId: 10004, name: 'GamerPro', avatar: 'https://picsum.photos/200?random=4', level: UserLevel.BRONZE, coins: 0, isVip: false, bio: 'Rank #1 Pubg', stats: { likes: 500, visitors: 2000, followers: 800, following: 50 }, isFollowing: false, isMuted: false },
+      { id: 'u5', customId: 10005, name: 'NoobMaster', avatar: 'https://picsum.photos/200?random=5', level: UserLevel.NEW, coins: 0, isVip: false, bio: 'New player', stats: { likes: 10, visitors: 50, followers: 5, following: 5 }, isFollowing: false, isMuted: false },
     ]
   },
   {
@@ -127,7 +128,7 @@ export const MOCK_ROOMS: Room[] = [
     thumbnail: 'https://picsum.photos/400/300?random=6',
     background: 'linear-gradient(to bottom, #450a0a, #7f1d1d)',
     speakers: [
-      { id: 'u6', name: 'الشاعر', avatar: 'https://picsum.photos/200?random=6', level: UserLevel.VIP, coins: 0, isVip: true, vipLevel: 5, frame: VIP_LEVELS[4].frameUrl, bio: 'كلمات من القلب', stats: { likes: 2000, visitors: 6000, followers: 3000, following: 100 }, isFollowing: true, isMuted: false },
+      { id: 'u6', customId: 10006, name: 'الشاعر', avatar: 'https://picsum.photos/200?random=6', level: UserLevel.VIP, coins: 0, isVip: true, vipLevel: 5, frame: VIP_LEVELS[4].frameUrl, bio: 'كلمات من القلب', stats: { likes: 2000, visitors: 6000, followers: 3000, following: 100 }, isFollowing: true, isMuted: false },
     ]
   }
 ];

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { User, UserLevel } from '../types';
 import { motion } from 'framer-motion';
@@ -13,7 +14,8 @@ interface UserProfileSheetProps {
 const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user, onClose, isCurrentUser, onAction }) => {
   
   const handleCopyId = () => {
-    navigator.clipboard.writeText(user.id === 'me' ? '829102' : user.id); // Mock ID logic
+    // Copy the customID if available, else fall back to auth ID
+    navigator.clipboard.writeText(user.customId ? user.customId.toString() : user.id); 
     onAction('copyId');
   };
 
@@ -115,12 +117,13 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user, onClose, isCu
                 }`}>
                    {user.level}
                 </div>
+                {user.isAdmin && <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full">ADMIN</span>}
              </div>
              <div className="flex items-center gap-4 text-slate-400 text-sm mb-3">
                 <button onClick={handleCopyId} className="flex items-center gap-1 hover:text-white transition group">
                    ID: 
                    <span className={`font-mono ${user.isSpecialId ? "font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-sm italic tracking-wider" : "text-slate-200"}`}>
-                     {user.id === 'me' ? '829102' : user.id}
+                     {user.customId || user.id}
                    </span>
                    {user.isSpecialId && <Sparkles size={12} className="text-amber-400 animate-pulse" />}
                    <Copy size={12} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />

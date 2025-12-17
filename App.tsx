@@ -64,9 +64,10 @@ export default function App() {
          const shouldBeAdmin = authUser.email && ADMIN_EMAILS.includes(authUser.email);
 
          if (!userSnap.exists()) {
-            // New User Creation
+            // New User Creation (Ideally handled in AuthScreen now, but keeping fallback)
             const newUserDoc: User = {
                 id: authUser.uid,
+                customId: Math.floor(10000 + Math.random() * 90000), // Random fallback if created here
                 name: authUser.displayName || 'مستخدم جديد',
                 avatar: authUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.uid}`,
                 level: UserLevel.NEW,
@@ -625,7 +626,7 @@ export default function App() {
                       </h2>
                       <div className="mt-1 flex items-center gap-1">
                         <span className={`font-mono text-xs ${user.isSpecialId ? "font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-sm italic tracking-wider" : "text-slate-400"}`}>
-                           ID: {user.id === 'me' ? '829102' : user.id}
+                           ID: {user.customId || user.id}
                         </span>
                         {user.isSpecialId && <Sparkles size={12} className="text-yellow-400 animate-pulse" />}
                       </div>

@@ -46,7 +46,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [inputValue, setInputValue] = useState('');
   
   // Local state for visual seats mapping. 
-  // It derives from room.speakers passed via props (which are synced via App.tsx)
   const [seats, setSeats] = useState<(User | null)[]>(new Array(8).fill(null));
 
   const [showGiftModal, setShowGiftModal] = useState(false);
@@ -79,19 +78,16 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // --- FIREBASE SYNC: Seats Logic ---
-  // Sync room speakers to seats
+  // --- FIREBASE SYNC: Seats Logic with seatIndex ---
   useEffect(() => {
-     // Create a fresh array of 8 empty slots
      const newSeats = new Array(8).fill(null);
      
-     // Fill slots based on room.speakers. 
-     // We assume speakers fill slots 0, 1, 2... for simplicity in this model.
-     // Or check if speakers have a 'seatIndex' property (advanced).
-     // Here we just fill linearly.
      if (room.speakers && Array.isArray(room.speakers)) {
         room.speakers.forEach((speaker, idx) => {
-           if (idx < 8) newSeats[idx] = speaker;
+           // If speaker has specific index, use it. Otherwise use array index as fallback.
+           // This handles legacy data and new logic.
+           const pos = (speaker.seatIndex !== undefined && speaker.seatIndex !== null) ? speaker.seatIndex : idx;
+           if (pos < 8) newSeats[pos] = speaker;
         });
      }
      
@@ -115,10 +111,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
             } as ChatMessage;
         });
         
-        setMessages(prev => {
-            // Keep simulated messages? No, for real experience, rely on DB.
-            return fetchedMessages; 
-        });
+        setMessages(prev => fetchedMessages);
     });
 
     return () => unsubscribe();
@@ -126,13 +119,10 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
 
   // Update mute state in Firestore when isMuted prop changes
-  // This logic runs if the user IS a speaker
   useEffect(() => {
      const isSpeaker = room.speakers.find(s => s.id === currentUser.id);
      
      if (isSpeaker && isSpeaker.isMuted !== isMuted) {
-        // Find user index and update locally then push?
-        // Better: Update the speaker object inside the array in DB.
         const updatedSpeakers = room.speakers.map(s => {
            if (s.id === currentUser.id) return { ...s, isMuted: isMuted };
            return s;
@@ -140,7 +130,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
         
         updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers }).catch(console.error);
      }
-  }, [isMuted]); // Note: room.speakers dependency omitted to avoid loop, we check condition inside
+  }, [isMuted]); 
 
   // Auto-scroll chat
   useEffect(() => {
@@ -230,13 +220,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
         await updateDoc(doc(db, "users", currentUser.id), {
             coins: increment(refundAmount - totalCost)
         });
-        
-        // Note: We should ideally update recipient balance too if recipientId is specific user.
-        // For 'All', we skip adding coins to everyone to simplify demo.
-        if (recipientId) {
-             // In real app, increment receiver's coins or diamond value
-        }
-
     } catch(e) { console.error("Gift Transaction Failed", e); return; }
 
     // Handle Lucky Win Visuals
@@ -307,15 +290,26 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
       // If someone is sitting there, open their profile
       setSelectedUser(userAtSeat);
     } else {
-      // Empty Seat
+      // Empty Seat logic
       if (amISitting) {
-          // I am already sitting somewhere else. Move? Or Do nothing.
-          // For simplicity: If I click empty seat and I am sitting, I move to that seat (Swap logic requires index tracking).
-          // Current logic: Just sit down if not sitting.
-          addToast("أنت موجود بالفعل في المايك", "info");
+          // --- MOVE SEAT LOGIC ---
+          // User wants to move from current seat to this new empty seat (index)
+          const updatedSpeakers = room.speakers.map(s => {
+              if (s.id === currentUser.id) {
+                  return { ...s, seatIndex: index }; // Update position
+              }
+              return s;
+          });
+          
+          try {
+             await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
+             addToast("تم تغيير المقعد", "success");
+          } catch(e) { console.error("Move Seat Error", e); }
+
       } else {
-          // Take seat: Add to room.speakers in DB
-          const newSpeaker = { ...currentUser, isMuted: false }; // Ensure we sit unmuted or follow state
+          // --- TAKE SEAT LOGIC ---
+          // User is not sitting, take this seat
+          const newSpeaker = { ...currentUser, isMuted: false, seatIndex: index }; 
           const updatedSpeakers = [...room.speakers, newSpeaker];
           
           try {
@@ -325,7 +319,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     }
   };
   
-  // Custom leave seat function (not leaving room entirely)
+  // Custom leave seat function
   const handleLeaveSeat = async () => {
       const updatedSpeakers = room.speakers.filter(s => s.id !== currentUser.id);
       try {
@@ -342,12 +336,8 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
        setShowGiftModal(true);
        setSelectedUser(null);
     } else if (action === 'toggleFollow') {
-       // Logic to follow user in DB (add to following list)
        addToast("تمت المتابعة (تجريبي)", 'success');
     } else if (action === 'toggleMute') {
-       // Only Host/Admin can mute others. 
-       // For now, assume we can update the room speaker state if we are admin
-       // Finding the user in speakers list and toggling mute
        const updatedSpeakers = room.speakers.map(s => {
            if (s.id === selectedUser.id) return { ...s, isMuted: !s.isMuted };
            return s;
@@ -591,8 +581,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                    if (room.speakers.some(s => s.id === currentUser.id)) {
                        onToggleMute();
                    } else {
-                       // Try to take a seat
-                       // Find first empty index? No, need to click specific seat.
                        addToast("اضغط على مقعد فارغ للصعود", "info");
                    }
                }}
@@ -634,8 +622,8 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
             {/* Gift Button */}
             <button 
                onClick={() => {
-                  setGiftRecipientId(null); // Reset to 'All' default or nothing
-                  setSelectedGiftQuantity(1); // Reset qty
+                  setGiftRecipientId(null); 
+                  setSelectedGiftQuantity(1); 
                   setShowGiftModal(true);
                }}
                className="w-10 h-10 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full text-white shadow-lg shadow-purple-900/50 flex items-center justify-center hover:scale-105 transition-transform active:scale-95"
@@ -655,7 +643,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                onClick={handleComboClick}
                className="absolute bottom-28 left-4 z-50 flex flex-col items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 shadow-[0_0_20px_rgba(236,72,153,0.6)] border-4 border-white/20 active:scale-95 cursor-pointer"
             >
-               {/* Progress Ring Background */}
                <svg className="absolute inset-0 w-full h-full -rotate-90">
                   <circle
                      cx="32" cy="32" r="30"
@@ -856,7 +843,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 onClose={() => setActiveGame(null)}
                 userCoins={currentUser.coins}
                 onUpdateCoins={(newCoins) => {
-                    // Update user coins in DB directly from game
                     updateDoc(doc(db, "users", currentUser.id), { coins: newCoins }).catch(console.error);
                 }}
                 winRate={gameSettings.wheelWinRate}

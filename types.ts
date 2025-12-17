@@ -20,6 +20,7 @@ export interface StoreItem {
 
 export interface User {
   id: string;
+  customId: number; // New Sequential Unique ID (e.g. 10001)
   name: string;
   avatar: string;
   level: UserLevel;
@@ -42,6 +43,7 @@ export interface User {
   isMuted?: boolean;
   isSpecialId?: boolean; // New property for Special IDs
   isAdmin?: boolean; // New property for Admin Access
+  seatIndex?: number; // Position on the mic (0-7)
 }
 
 export interface Contributor {

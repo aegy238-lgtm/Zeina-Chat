@@ -43,7 +43,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [chargeModalOpen, setChargeModalOpen] = useState(false);
   const [selectedUserForCharge, setSelectedUserForCharge] = useState<any | null>(null);
   const [chargeAmount, setChargeAmount] = useState<string>('');
-  const [chargeProof, setChargeProof] = useState<string>(''); // For the receipt image
+  const [chargeProof, setChargeProof] = useState<string>(''); 
 
   // State for ID Change Logic
   const [idChangeModalOpen, setIdChangeModalOpen] = useState(false);
@@ -84,10 +84,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleBanUser = async (userId: string, currentStatus: string) => {
+     // --- ADMIN PROTECTION ---
+     const targetUser = localUsers.find(u => u.id === userId);
+     if (targetUser?.isAdmin) {
+         alert("❌ خطأ: لا يمكن حظر مدير الموقع!");
+         return;
+     }
+
      try {
         await updateDoc(doc(db, "users", userId), {
            status: currentStatus === 'active' || !currentStatus ? 'banned' : 'active'
         });
+        alert(`تم تغيير حالة المستخدم ${targetUser?.name || ''}`);
      } catch(e) { alert("حدث خطأ"); }
   };
 
@@ -95,32 +103,34 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const openChargeModal = (user: any) => {
      setSelectedUserForCharge(user);
      setChargeAmount('');
-     setChargeProof(''); // Reset proof image
+     setChargeProof(''); 
      setChargeModalOpen(true);
   };
 
   // ID Change Logic
   const openIdChangeModal = (user: any) => {
     setSelectedUserForIdChange(user);
-    setNewIdValue(user.id);
+    setNewIdValue(user.customId ? user.customId.toString() : '');
     setIsNewIdSpecial(user.isSpecialId || false);
     setIdChangeModalOpen(true);
   };
 
   const handleConfirmIdChange = async () => {
     if (!selectedUserForIdChange || !newIdValue.trim()) return;
-
-    // NOTE: Changing ID in Firestore means creating a new doc and deleting old one if we use ID as key.
-    // However, since we used hardcoded ID or Auth UID, we usually can't change the Document ID easily.
-    // For this simulation, we will update a 'displayId' field or simply 'id' field if stored inside data.
-    // Assuming 'id' field in data is what we display:
     
+    // Convert to number for customId
+    const numId = parseInt(newIdValue);
+    if(isNaN(numId)) {
+        alert("يجب أن يكون المعرف أرقام فقط");
+        return;
+    }
+
     try {
         await updateDoc(doc(db, "users", selectedUserForIdChange.id), {
-            id: newIdValue, // This updates the field inside the doc, not the doc key
+            customId: numId,
             isSpecialId: isNewIdSpecial
         });
-        alert(`تم تغيير معرف المستخدم إلى ${newIdValue}`);
+        alert(`تم تغيير المعرف المميز إلى ${numId}`);
         setIdChangeModalOpen(false);
     } catch(e) {
         alert("فشل تغيير المعرف");
@@ -130,15 +140,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleSearchAndOpenCharge = () => {
     if (!searchIdInput.trim()) return;
     
-    // Attempt to find user locally from the fetched list
+    // Search by CUSTOM ID (the sequential number) string comparison
     let foundUser = localUsers.find(
-       u => u.id === searchIdInput
+       u => (u.customId && u.customId.toString() === searchIdInput) || u.id === searchIdInput
     );
 
-    // If not found, simulate creation? No, better to stick to real DB in this mode.
-    // Or check if user exists in DB via query? 
     if (!foundUser) {
-        alert("المستخدم غير موجود");
+        alert("المستخدم غير موجود (تأكد من كتابة ID بشكل صحيح)");
         return;
     }
 
@@ -185,6 +193,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           const reader = new FileReader();
           reader.onload = (event) => {
               if (event.target?.result) {
+                  // Ensure Base64 isn't too huge or handle compression if this was a real production app with storage
                   setter((prev: any) => ({ ...prev, [field]: event.target.result }));
               }
           };
@@ -249,19 +258,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleSaveStoreItem = async () => {
     if (!editingStoreItem || !editingStoreItem.name || !editingStoreItem.price) return;
     
-    const itemId = editingStoreItem.id || Date.now().toString();
+    const itemId = editingStoreItem.id || `item_${Date.now()}`;
+    
+    // Explicitly defining type to ensure it saves correctly for filters
     const newItem: StoreItem = {
         id: itemId,
         name: editingStoreItem.name!,
         price: Number(editingStoreItem.price),
-        type: editingStoreItem.type || 'frame',
+        type: editingStoreItem.type || 'frame', // Default to frame if missing
         url: editingStoreItem.url || ''
     };
 
     try {
         await setDoc(doc(db, "store_items", itemId), newItem);
         setEditingStoreItem(null);
-    } catch(e) { alert("فشل الحفظ"); }
+        alert("تم حفظ العنصر في المتجر بنجاح! سيظهر لجميع المستخدمين.");
+    } catch(e) { 
+        console.error(e);
+        alert("فشل الحفظ. قد تكون الصورة كبيرة جداً لقاعدة البيانات المباشرة."); 
+    }
   };
 
   const handleDeleteStoreItem = async (id: string) => {
@@ -277,6 +292,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
      } catch(e) { console.error(e); }
   };
 
+  // --- Sidebar Component ---
   const SidebarItem = ({ id, icon: Icon, label }: any) => (
     <button 
       onClick={() => setActiveTab(id)}
@@ -301,7 +317,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
             <div>
                <h1 className="font-bold text-lg leading-none">لوحة القيادة</h1>
-               <span className="text-[10px] text-slate-400">Admin Control Panel v2.2 (Connected)</span>
+               <span className="text-[10px] text-slate-400">Admin Control Panel v2.4</span>
             </div>
          </div>
          <button onClick={onClose} className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition">
@@ -310,15 +326,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       </div>
 
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
-         {/* Sidebar / Navigation (Horizontal on Mobile, Vertical on Desktop) */}
+         {/* Sidebar */}
          <div className="w-full md:w-64 border-b md:border-b-0 md:border-l border-white/5 p-2 md:p-4 flex flex-row md:flex-col gap-2 bg-slate-900/20 overflow-x-auto scrollbar-hide flex-shrink-0">
             <SidebarItem id="dashboard" icon={LayoutDashboard} label="الرئيسية" />
             <SidebarItem id="users" icon={Users} label="المستخدمين" />
             <SidebarItem id="rooms" icon={Radio} label="الغرف" />
+            
+            {/* Added Missing Items */}
             <SidebarItem id="vip" icon={Crown} label="VIP" />
             <SidebarItem id="gifts" icon={GiftIcon} label="الهدايا" />
             <SidebarItem id="store" icon={ShoppingBag} label="المتجر" />
             <SidebarItem id="games" icon={Gamepad2} label="الألعاب" />
+            
             <SidebarItem id="settings" icon={Settings} label="النظام" />
          </div>
 
@@ -333,17 +352,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                        <div className="absolute top-0 right-0 p-4 opacity-10"><Users size={64} /></div>
                        <h3 className="text-slate-400 text-xs font-bold">إجمالي المستخدمين (DB)</h3>
                        <p className="text-2xl font-black mt-1 text-white">{localUsers.length}</p>
-                       <span className="text-[10px] text-green-400 flex items-center gap-1 mt-2">
-                          <BarChart3 size={10} /> Live Data
-                       </span>
                     </div>
                     <div className="bg-slate-900 p-4 rounded-2xl border border-white/5 relative overflow-hidden">
                        <div className="absolute top-0 right-0 p-4 opacity-10"><Radio size={64} /></div>
                        <h3 className="text-slate-400 text-xs font-bold">الغرف النشطة</h3>
                        <p className="text-2xl font-black mt-1 text-amber-400">{rooms.length}</p>
-                       <span className="text-[10px] text-slate-500 mt-2">
-                          سعة السيرفر: مستقرة
-                       </span>
                     </div>
                  </div>
               </motion.div>
@@ -395,14 +408,49 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                  className="w-full bg-slate-800 border border-white/10 rounded-lg p-2 text-white"
                               />
                            </div>
+                           
+                           {/* Upload VIP Image Section */}
                            <div>
-                              <label className="text-xs text-slate-400">رابط الإطار</label>
+                              <label className="text-xs text-slate-400 mb-2 block">صورة الإطار</label>
+                              <div className="flex gap-4 items-start">
+                                 {/* Preview */}
+                                 <div className="w-16 h-16 bg-slate-800 rounded-xl border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0 relative">
+                                     {editingVip.frameUrl ? (
+                                        <img src={editingVip.frameUrl} className="w-full h-full object-contain" alt="Preview" />
+                                     ) : (
+                                        <Crown className="text-slate-600" />
+                                     )}
+                                 </div>
+
+                                 {/* Upload Control */}
+                                 <div className="flex-1">
+                                     <label className="flex flex-col items-center justify-center w-full h-16 border-2 border-dashed border-white/10 rounded-xl hover:border-amber-500/50 hover:bg-amber-500/10 transition-colors cursor-pointer bg-slate-800">
+                                         <div className="flex items-center gap-2 text-slate-400">
+                                            <Upload size={14} />
+                                            <span className="text-xs font-bold">رفع صورة</span>
+                                         </div>
+                                         <input 
+                                            type="file" 
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => handleItemImageUpload(e, setEditingVip, 'frameUrl')}
+                                         />
+                                     </label>
+                                     <p className="text-[9px] text-slate-500 mt-1">يفضل صور PNG بخلفية شفافة</p>
+                                 </div>
+                              </div>
+                           </div>
+
+                           <div>
+                              <label className="text-xs text-slate-400">رابط الإطار (أو تم الرفع)</label>
                               <input 
                                  value={editingVip.frameUrl} 
                                  onChange={e => setEditingVip({...editingVip, frameUrl: e.target.value})}
-                                 className="w-full bg-slate-800 border border-white/10 rounded-lg p-2 text-white text-xs"
+                                 className="w-full bg-slate-800 border border-white/10 rounded-lg p-2 text-white text-xs truncate"
+                                 placeholder="https://..."
                               />
                            </div>
+
                            <div className="flex gap-2 pt-2">
                               <button onClick={() => setEditingVip(null)} className="flex-1 bg-slate-700 py-2 rounded-lg text-sm">إلغاء</button>
                               <button onClick={handleSaveVip} className="flex-1 bg-amber-500 text-black py-2 rounded-lg text-sm font-bold">حفظ</button>
@@ -571,7 +619,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         onClick={() => setEditingStoreItem({ type: 'frame' })} 
                         className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
                      >
-                        <Plus size={14} /> إضافة
+                        <Plus size={14} /> إضافة عنصر
                      </button>
                   </div>
 
@@ -663,14 +711,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                             onChange={(e) => handleItemImageUpload(e, setEditingStoreItem, 'url')}
                                          />
                                      </label>
-                                     <p className="text-[9px] text-slate-500 mt-1">يفضل صور PNG بخلفية شفافة</p>
+                                     <p className="text-[9px] text-slate-500 mt-1">اضغط لرفع صورة PNG (يفضل خلفية شفافة)</p>
                                  </div>
                               </div>
                            </div>
 
                            <div className="flex gap-2 pt-2">
                               <button onClick={() => setEditingStoreItem(null)} className="flex-1 bg-slate-700 py-2 rounded-lg text-sm">إلغاء</button>
-                              <button onClick={handleSaveStoreItem} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">حفظ</button>
+                              <button onClick={handleSaveStoreItem} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">حفظ ونشر</button>
                            </div>
                         </div>
                      </div>
@@ -776,34 +824,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                    </div>
                </motion.div>
             )}
-            
-            {/* Rooms Tab */}
-             {activeTab === 'rooms' && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-                   <h3 className="font-bold text-white flex items-center gap-2 mb-4">
-                     <Radio size={20} className="text-cyan-500" /> إدارة الغرف
-                  </h3>
-                  <div className="space-y-3">
-                     {rooms.map(room => (
-                        <div key={room.id} className="bg-slate-900 p-3 md:p-4 rounded-xl border border-white/5 flex flex-col md:flex-row justify-between items-center gap-3">
-                           <div className="flex items-center gap-3 w-full md:w-auto">
-                              <img src={room.thumbnail} className="w-12 h-12 rounded-lg object-cover" />
-                              <div className="min-w-0">
-                                 <h4 className="font-bold text-sm text-white truncate">{room.title}</h4>
-                                 <p className="text-[10px] text-slate-400 truncate">ID: {room.id} | المالك: {room.speakers[0]?.name}</p>
-                              </div>
-                           </div>
-                           <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-                              <div className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400">{room.category}</div>
-                              <button onClick={() => handleDeleteRoom(room.id)} className="p-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20">
-                                 <Trash2 size={16} />
-                              </button>
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-                </motion.div>
-            )}
 
             {activeTab === 'users' && (
                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
@@ -825,8 +845,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         <thead className="bg-white/5 text-slate-400 font-bold">
                            <tr>
                               <th className="p-3">المستخدم</th>
-                              <th className="p-3">ID</th>
-                              <th className="p-3">المستوى</th>
+                              <th className="p-3">ID / المميز</th>
                               <th className="p-3">الرصيد</th>
                               <th className="p-3">الحالة</th>
                               <th className="p-3">تحكم</th>
@@ -838,14 +857,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                  <td className="p-3 font-bold flex items-center gap-2">
                                     <div className="w-6 h-6 rounded-full bg-slate-700 flex-shrink-0"></div>
                                     <span className="truncate max-w-[100px]">{u.name}</span>
+                                    {u.isAdmin && <span className="bg-red-500 text-white text-[8px] px-1 rounded">ADMIN</span>}
                                  </td>
                                  <td className="p-3 font-mono text-slate-500">
-                                    <div className="flex items-center gap-1">
-                                       {u.isSpecialId && <Sparkles size={10} className="text-amber-400" />}
-                                       <span className={u.isSpecialId ? "text-amber-400 font-bold italic" : ""}>{u.id}</span>
+                                    <div className="flex flex-col">
+                                       {u.customId && (
+                                          <div className="flex items-center gap-1 text-amber-400 font-bold">
+                                             <Sparkles size={10} />
+                                             <span>{u.customId}</span>
+                                          </div>
+                                       )}
+                                       <span className="text-[8px] opacity-50">{u.id}</span>
                                     </div>
                                  </td>
-                                 <td className="p-3">{u.level}</td>
                                  <td className="p-3 text-yellow-400 font-mono">{u.coins.toLocaleString()}</td>
                                  <td className="p-3">
                                     <span className={`px-2 py-0.5 rounded-full ${u.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -880,36 +904,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                </motion.div>
             )}
 
-            {activeTab === 'settings' && (
-               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-                   <h3 className="font-bold text-white flex items-center gap-2 mb-4">
-                     <Settings size={20} className="text-slate-400" /> إعدادات النظام والتطبيق
-                  </h3>
-                   
-                    <div className="bg-slate-900 p-6 rounded-2xl border border-white/5 space-y-6">
-                     <div className="border-b border-white/5 pb-6">
-                        <h4 className="font-bold text-sm mb-4 text-white flex items-center gap-2">
-                            <ImageIcon size={16} className="text-blue-500"/> إدارة البنر الرئيسي
-                        </h4>
-                        <div className="flex flex-col gap-4">
-                             <div className="relative w-full h-32 rounded-xl overflow-hidden border border-white/10 group">
-                                <img src={bannerImage} className="w-full h-full object-cover" alt="Current Banner" />
-                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <span className="text-xs text-white font-bold">المعاينة الحالية</span>
-                                </div>
-                             </div>
-                             <div className="flex items-center gap-4">
-                                 <label className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg cursor-pointer flex items-center justify-center gap-2 text-xs font-bold transition-colors">
-                                    <Upload size={14} /> رفع بنر جديد
-                                    <input type="file" accept="image/*" onChange={handleAdminBannerUpload} className="hidden" />
-                                 </label>
-                             </div>
-                        </div>
-                     </div>
-                  </div>
-               </motion.div>
-            )}
-
          </div>
       </div>
       
@@ -925,17 +919,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                  onClick={e => e.stopPropagation()}
                >
                   <div className="flex justify-between items-center mb-4">
-                     <h3 className="font-bold text-lg text-white flex items-center gap-2"><Wallet size={20} className="text-green-500"/> شحن عبر المعرف</h3>
+                     <h3 className="font-bold text-lg text-white flex items-center gap-2"><Wallet size={20} className="text-green-500"/> شحن عبر المعرف (ID)</h3>
                      <button onClick={() => setIdSearchModalOpen(false)} className="text-slate-500 hover:text-white"><X size={20}/></button>
                   </div>
                   <div className="space-y-4">
                      <div>
-                        <label className="text-xs text-slate-400 mb-1 block">أدخل معرف المستخدم (ID)</label>
+                        <label className="text-xs text-slate-400 mb-1 block">أدخل رقم المعرف المميز</label>
                         <input 
-                           type="text" 
+                           type="number" 
                            value={searchIdInput}
                            onChange={(e) => setSearchIdInput(e.target.value)}
-                           placeholder="مثال: 829102"
+                           placeholder="مثال: 10001"
                            className="w-full bg-slate-800 border border-white/10 rounded-xl p-3 text-sm focus:border-green-500 outline-none font-mono"
                            autoFocus
                         />
@@ -972,7 +966,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                           <p className="text-sm text-slate-400 mt-1">
                              للمستخدم: <span className="text-white font-bold">{selectedUserForCharge.name}</span>
                           </p>
-                          <p className="text-[10px] text-slate-500 font-mono">ID: {selectedUserForCharge.id}</p>
+                          <p className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+                             ID: {selectedUserForCharge.customId || selectedUserForCharge.id}
+                          </p>
                        </div>
                        <button onClick={() => setChargeModalOpen(false)} className="text-slate-500 hover:text-white"><X size={20}/></button>
                     </div>
@@ -991,13 +987,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                              className="w-full bg-slate-800 border border-white/10 rounded-xl p-3 text-lg font-bold text-white focus:border-yellow-500 outline-none text-center"
                              autoFocus
                           />
-                          {/* New Balance Preview */}
-                          <div className="flex justify-between items-center bg-black/20 p-2 rounded-lg mt-2">
-                             <span className="text-xs text-slate-400">الرصيد بعد الشحن:</span>
-                             <span className="text-sm font-bold text-green-400">
-                                {(selectedUserForCharge.coins + (Number(chargeAmount) || 0)).toLocaleString()} 🪙
-                             </span>
-                          </div>
                        </div>
                        <div className="grid grid-cols-3 gap-2">
                           {[1000, 5000, 10000, 50000, 100000, 500000].map(amt => (
@@ -1009,36 +998,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                 +{amt.toLocaleString()}
                              </button>
                           ))}
-                       </div>
-                       <div>
-                          <label className="text-xs text-slate-400 mb-1 block">إرفاق إيصال الشحن (اختياري)</label>
-                          <label className="block w-full cursor-pointer relative group">
-                              <div className="w-full bg-slate-800 border-2 border-dashed border-white/10 rounded-xl p-3 flex flex-col items-center justify-center gap-2 group-hover:border-yellow-500/50 transition-colors">
-                                 {chargeProof ? (
-                                    <div className="relative w-full h-24">
-                                       <img src={chargeProof} className="w-full h-full object-contain rounded-lg" alt="Receipt" />
-                                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <span className="text-xs text-white">تغيير الصورة</span>
-                                       </div>
-                                    </div>
-                                 ) : (
-                                    <>
-                                       <div className="p-2 bg-white/5 rounded-full group-hover:bg-yellow-500/10 transition-colors">
-                                          <FileText size={18} className="text-slate-400 group-hover:text-yellow-500" />
-                                       </div>
-                                       <span className="text-xs text-slate-500 group-hover:text-slate-300">
-                                          اضغط لرفع صورة الإيصال
-                                       </span>
-                                    </>
-                                 )}
-                              </div>
-                              <input 
-                                 type="file" 
-                                 accept="image/*"
-                                 onChange={handleChargeProofUpload}
-                                 className="hidden"
-                              />
-                          </label>
                        </div>
                        <button 
                           onClick={handleConfirmCharge}
@@ -1066,7 +1025,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 >
                     <div className="flex justify-between items-center">
                         <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                            <Hash className="text-purple-500" /> تغيير المعرف (ID)
+                            <Hash className="text-purple-500" /> تغيير المعرف المميز
                         </h3>
                         <button onClick={() => setIdChangeModalOpen(false)} className="text-slate-500 hover:text-white"><X size={20}/></button>
                     </div>
@@ -1076,9 +1035,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                             تغيير المعرف للمستخدم: <span className="text-white font-bold">{selectedUserForIdChange.name}</span>
                         </p>
                         
-                        <label className="text-xs text-slate-400 mb-1 block">المعرف الجديد</label>
+                        <label className="text-xs text-slate-400 mb-1 block">المعرف الجديد (أرقام فقط)</label>
                         <input 
-                            type="text" 
+                            type="number" 
                             value={newIdValue}
                             onChange={(e) => setNewIdValue(e.target.value)}
                             className="w-full bg-slate-800 border border-white/10 rounded-xl p-3 text-white font-mono focus:border-purple-500 outline-none"
