@@ -12,6 +12,8 @@ import SlotsGameModal from './SlotsGameModal';
 import GameCenterModal from './GameCenterModal';
 import RoomSettingsModal from './RoomSettingsModal';
 import WinStrip from './WinStrip';
+import { db } from '../services/firebase';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit } from 'firebase/firestore';
 
 interface VoiceRoomProps {
   room: Room;
@@ -84,6 +86,49 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // --- FIREBASE CHAT SYNC ---
+  useEffect(() => {
+    if (!room.id) return;
+    
+    const messagesRef = collection(db, "rooms", room.id, "messages");
+    const q = query(messagesRef, orderBy("timestamp", "asc"), limit(50));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const fetchedMessages = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                // Handle timestamp conversion if needed, but keeping it simple for display
+            } as ChatMessage;
+        });
+        // We append local simulated messages to state, so here we might just replace.
+        // But since we have simulated messages locally, we need to merge or just rely on Firebase for user messages
+        // For simplicity: Replace state with Firebase messages + keep simulated ones? 
+        // Better: Just set messages from Firebase. Simulated messages will be added to this list locally 
+        // (but they won't persist on refresh, which is fine for simulation).
+        
+        // However, to keep the simulation effect active without pushing garbage to DB, 
+        // we will MERGE firebase messages with existing simulated messages in state is tricky.
+        // Let's just setMessages from Firebase and append simulated ones locally.
+        
+        setMessages(prev => {
+            // Keep simulated messages that are NOT in firebase (id starts with 'sim_')
+            const simulated = prev.filter(m => m.id.startsWith('sim_'));
+            // Filter out firebase messages from previous state to avoid duplicates if we were appending
+            // Actually, best is to just use what comes from DB for real chat.
+            
+            // Combining: Real DB messages + existing simulated ones.
+            // Sort by time? Simulated ones are 'now'. 
+            // Simplified: Just show DB messages. Simulated messages are added via separate effect.
+            return fetchedMessages; 
+        });
+    });
+
+    return () => unsubscribe();
+  }, [room.id]);
+
+
   // Sync seat user data with current user updates (like VIP purchase)
   useEffect(() => {
      setSeats(prev => prev.map(s => s?.id === currentUser.id ? currentUser : s));
@@ -109,8 +154,10 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
        setEntranceBanner(text);
        setTimeout(() => setEntranceBanner(null), 4000);
        
+       // Send entrance message to Firebase? Or keep local?
+       // Let's keep system messages local to avoid DB spam for this demo
        setMessages(prev => [...prev, {
-         id: Date.now().toString(),
+         id: `sim_${Date.now()}`,
          userId: 'sys',
          userName: 'النظام',
          userLevel: UserLevel.NEW,
@@ -121,7 +168,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     announceEntrance();
   }, []);
 
-  // Simulating live chat
+  // Simulating live chat (Keep this local only)
   useEffect(() => {
     const interval = setInterval(async () => {
       const simulatedText = await generateSimulatedChat(room.title, messages.slice(-5).map(m => m.content));
@@ -131,18 +178,21 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
       const randomSpeaker = activeSpeakers[Math.floor(Math.random() * activeSpeakers.length)];
       
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        userId: randomSpeaker.id,
-        userName: randomSpeaker.name,
-        userLevel: randomSpeaker.level,
-        content: simulatedText,
-        type: 'text'
-      }]);
+      // Only add if it's NOT the current user (don't impersonate me)
+      if (randomSpeaker.id !== currentUser.id) {
+          setMessages(prev => [...prev, {
+            id: `sim_${Date.now()}`,
+            userId: randomSpeaker.id,
+            userName: randomSpeaker.name,
+            userLevel: randomSpeaker.level,
+            content: simulatedText,
+            type: 'text'
+          }]);
+      }
     }, 8000); 
 
     return () => clearInterval(interval);
-  }, [messages, seats, room.title]);
+  }, [messages, seats, room.title, currentUser.id]);
 
   // Combo Timer Countdown
   useEffect(() => {
@@ -170,21 +220,29 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
      }, 3000);
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
-    setMessages([...messages, {
-      id: Date.now().toString(),
+    
+    const newMessage = {
       userId: currentUser.id,
       userName: currentUser.name,
       userLevel: currentUser.level,
       content: inputValue,
       type: 'text',
-      bubbleUrl: currentUser.activeBubble // Attach current user bubble
-    }]);
-    setInputValue('');
+      bubbleUrl: currentUser.activeBubble || '',
+      timestamp: serverTimestamp()
+    };
+    
+    try {
+        await addDoc(collection(db, "rooms", room.id, "messages"), newMessage);
+        setInputValue('');
+    } catch (e) {
+        console.error("Error sending message", e);
+        addToast("فشل إرسال الرسالة", "error");
+    }
   };
 
-  const handleSendGift = (gift: Gift, quantity: number = 1, recipientId: string | null = null) => {
+  const handleSendGift = async (gift: Gift, quantity: number = 1, recipientId: string | null = null) => {
     const totalCost = gift.cost * quantity;
 
     // 1. Check Balance
@@ -249,13 +307,12 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     setActiveGiftEffect(gift);
     setTimeout(() => setActiveGiftEffect(null), 3000);
 
-    // Add Message
+    // Add Message to Firebase
     const content = quantity > 1 
       ? `أرسل ${gift.name} x${quantity} إلى ${recipientName}` 
       : `أرسل ${gift.name} إلى ${recipientName}`;
 
-    setMessages([...messages, {
-      id: Date.now().toString(),
+    const giftMessage = {
       userId: currentUser.id,
       userName: currentUser.name,
       userLevel: currentUser.level,
@@ -263,14 +320,16 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
       type: 'gift',
       giftData: gift,
       isLuckyWin: isLuckyWin,
-      winAmount: refundAmount
-    }]);
+      winAmount: refundAmount,
+      timestamp: serverTimestamp()
+    };
     
-    // Removed Toast Notification for sending gifts as requested
-    // if (!isLuckyWin) {
-    //     addToast(content, 'success');
-    // }
-
+    try {
+        await addDoc(collection(db, "rooms", room.id, "messages"), giftMessage);
+    } catch(e) {
+        console.error("Error sending gift message", e);
+    }
+    
     // 4. Activate Combo Button
     setComboState({
        gift: gift,
@@ -317,6 +376,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
         }
       }
       setSeats(newSeats);
+      // NOTE: In a real app, update 'speakers' array in Firebase Room Doc here
     }
   };
 

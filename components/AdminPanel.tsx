@@ -272,13 +272,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const SidebarItem = ({ id, icon: Icon, label }: any) => (
     <button 
       onClick={() => setActiveTab(id)}
-      className={`flex items-center gap-3 p-3 w-full rounded-xl transition-all ${
+      className={`flex items-center gap-3 p-3 rounded-xl transition-all whitespace-nowrap ${
         activeTab === id 
           ? 'bg-amber-500 text-black font-bold shadow-lg shadow-amber-900/20' 
           : 'text-slate-400 hover:bg-white/5 hover:text-white'
-      }`}
+      } md:w-full w-auto`}
     >
-      <Icon size={20} />
+      <Icon size={20} className="flex-shrink-0" />
       <span className="text-sm">{label}</span>
     </button>
   );
@@ -286,7 +286,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   return (
     <div className="fixed inset-0 z-[100] bg-[#0f172a] flex flex-col font-cairo overflow-hidden">
       {/* Top Bar */}
-      <div className="h-16 border-b border-white/5 flex items-center justify-between px-6 bg-slate-900/50 backdrop-blur">
+      <div className="h-16 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-slate-900/50 backdrop-blur shrink-0">
          <div className="flex items-center gap-3">
             <div className="bg-red-600 p-1.5 rounded-lg">
                <ShieldAlert size={20} className="text-white" />
@@ -301,26 +301,26 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
          </button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-         {/* Sidebar */}
-         <div className="w-20 lg:w-64 border-l border-white/5 p-4 flex flex-col gap-2 bg-slate-900/20">
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+         {/* Sidebar / Navigation (Horizontal on Mobile, Vertical on Desktop) */}
+         <div className="w-full md:w-64 border-b md:border-b-0 md:border-l border-white/5 p-2 md:p-4 flex flex-row md:flex-col gap-2 bg-slate-900/20 overflow-x-auto scrollbar-hide flex-shrink-0">
             <SidebarItem id="dashboard" icon={LayoutDashboard} label="الرئيسية" />
             <SidebarItem id="users" icon={Users} label="المستخدمين" />
             <SidebarItem id="rooms" icon={Radio} label="الغرف" />
-            <SidebarItem id="vip" icon={Crown} label="إعدادات VIP" />
+            <SidebarItem id="vip" icon={Crown} label="VIP" />
             <SidebarItem id="gifts" icon={GiftIcon} label="الهدايا" />
-            <SidebarItem id="store" icon={ShoppingBag} label="الحقيبة والمتجر" />
-            <SidebarItem id="games" icon={Gamepad2} label="إعدادات الألعاب" />
+            <SidebarItem id="store" icon={ShoppingBag} label="المتجر" />
+            <SidebarItem id="games" icon={Gamepad2} label="الألعاب" />
             <SidebarItem id="settings" icon={Settings} label="النظام" />
          </div>
 
          {/* Content Area */}
-         <div className="flex-1 overflow-y-auto p-6 bg-slate-950 relative">
+         <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-950 relative">
             
             {activeTab === 'dashboard' && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
                  {/* Stats Cards */}
-                 <div className="grid grid-cols-2 gap-4">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-slate-900 p-4 rounded-2xl border border-white/5 relative overflow-hidden">
                        <div className="absolute top-0 right-0 p-4 opacity-10"><Users size={64} /></div>
                        <h3 className="text-slate-400 text-xs font-bold">إجمالي المستخدمين</h3>
@@ -349,15 +349,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      {vipLevels.map((vip) => (
-                        <div key={vip.level} className="bg-slate-900 p-4 rounded-xl border border-white/5 flex items-center gap-4">
-                           <img src={vip.frameUrl} className="w-16 h-16 object-contain" alt={vip.name} />
-                           <div className="flex-1">
-                              <h4 className="font-bold text-lg text-white">{vip.name} (Lv.{vip.level})</h4>
-                              <p className="text-yellow-400 font-bold text-sm">{vip.cost.toLocaleString()} 🪙</p>
+                        <div key={vip.level} className="bg-slate-900 p-4 rounded-xl border border-white/5 flex items-center gap-3 md:gap-4">
+                           <img src={vip.frameUrl} className="w-12 h-12 md:w-16 md:h-16 object-contain flex-shrink-0" alt={vip.name} />
+                           <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-base md:text-lg text-white truncate">{vip.name} (Lv.{vip.level})</h4>
+                              <p className="text-yellow-400 font-bold text-xs md:text-sm">{vip.cost.toLocaleString()} 🪙</p>
                            </div>
                            <button 
                               onClick={() => setEditingVip(vip)}
-                              className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition"
+                              className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition flex-shrink-0"
                            >
                               <Edit2 size={16} className="text-slate-400" />
                            </button>
@@ -368,7 +368,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   {/* VIP Edit Modal */}
                   {editingVip && (
                      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                        <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-amber-500/50 p-6 space-y-4">
+                        <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-amber-500/50 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
                            <h3 className="font-bold text-lg text-white">تعديل {editingVip.name}</h3>
                            <div>
                               <label className="text-xs text-slate-400">الاسم</label>
@@ -416,13 +416,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         onClick={() => setEditingGift({})} 
                         className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
                      >
-                        <Plus size={14} /> إضافة هدية
+                        <Plus size={14} /> إضافة
                      </button>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                      {gifts.map((gift) => (
-                        <div key={gift.id} className="bg-slate-900 p-4 rounded-xl border border-white/5 flex flex-col items-center gap-2 relative group">
+                        <div key={gift.id} className="bg-slate-900 p-3 md:p-4 rounded-xl border border-white/5 flex flex-col items-center gap-2 relative group">
                            {gift.isLucky && (
                               <div className="absolute top-0 right-0 z-0 text-white/10 -rotate-12">
                                  <Clover size={60} />
@@ -431,25 +431,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                            
                            <button 
                               onClick={() => handleDeleteGift(gift.id)}
-                              className="absolute top-2 left-2 p-2 bg-red-500/80 text-white rounded-lg hover:bg-red-600 opacity-100 transition-opacity z-10"
+                              className="absolute top-2 left-2 p-1.5 md:p-2 bg-red-500/80 text-white rounded-lg hover:bg-red-600 opacity-100 z-10"
                               title="حذف الهدية"
                            >
-                              <Trash2 size={14} />
+                              <Trash2 size={12} />
                            </button>
                            <button 
                               onClick={() => setEditingGift(gift)}
-                              className="absolute top-2 right-2 p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 opacity-100 transition-opacity z-10"
+                              className="absolute top-2 right-2 p-1.5 md:p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 opacity-100 z-10"
                            >
-                              <Edit2 size={14} />
+                              <Edit2 size={12} />
                            </button>
                            
-                           <div className="w-12 h-12 flex items-center justify-center text-3xl my-2 relative z-0">
+                           <div className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center text-3xl my-2 relative z-0">
                               {gift.icon.startsWith('http') || gift.icon.startsWith('data:') ? <img src={gift.icon} className="w-full h-full object-contain" /> : gift.icon}
                            </div>
-                           <div className="text-center relative z-0">
-                              <h4 className="font-bold text-sm text-white flex items-center justify-center gap-1">
+                           <div className="text-center relative z-0 w-full">
+                              <h4 className="font-bold text-xs md:text-sm text-white flex items-center justify-center gap-1 truncate w-full">
                                  {gift.name}
-                                 {gift.isLucky && <Clover size={10} className="text-green-500" fill="currentColor" />}
+                                 {gift.isLucky && <Clover size={10} className="text-green-500 flex-shrink-0" fill="currentColor" />}
                               </h4>
                               <p className="text-yellow-400 font-bold text-xs">{gift.cost} 🪙</p>
                            </div>
@@ -460,7 +460,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   {/* Gift Edit Modal */}
                   {editingGift && (
                      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                        <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-pink-500/50 p-6 space-y-4">
+                        <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-pink-500/50 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
                            <h3 className="font-bold text-lg text-white">{editingGift.id ? 'تعديل الهدية' : 'إضافة هدية جديدة'}</h3>
                            <div className="grid grid-cols-2 gap-4">
                               <div>
@@ -532,13 +532,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                            <div className="flex items-center gap-3 bg-slate-800 p-3 rounded-xl border border-white/5">
                               <div 
                                  onClick={() => setEditingGift({...editingGift, isLucky: !editingGift.isLucky})}
-                                 className={`w-10 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors ${editingGift.isLucky ? 'bg-green-500 justify-end' : 'bg-slate-600 justify-start'}`}
+                                 className={`w-10 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors flex-shrink-0 ${editingGift.isLucky ? 'bg-green-500 justify-end' : 'bg-slate-600 justify-start'}`}
                               >
                                  <div className="w-4 h-4 rounded-full bg-white shadow-sm"></div>
                               </div>
                               <div className="flex-1">
-                                 <span className="text-sm font-bold text-white block flex items-center gap-1">هدية حظ (Lucky Gift) <Clover size={14} className="text-green-500" /></span>
-                                 <span className="text-[10px] text-slate-400 block">عند إرسالها، قد يربح المرسل كوينز</span>
+                                 <span className="text-sm font-bold text-white block flex items-center gap-1">هدية حظ <Clover size={14} className="text-green-500" /></span>
+                                 <span className="text-[10px] text-slate-400 block">قد يربح المرسل كوينز</span>
                               </div>
                            </div>
 
@@ -557,22 +557,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
                   <div className="flex justify-between items-center mb-4">
                      <h3 className="font-bold text-white flex items-center gap-2">
-                        <ShoppingBag size={20} className="text-blue-500" /> المتجر (إطارات وفقاعات)
+                        <ShoppingBag size={20} className="text-blue-500" /> المتجر
                      </h3>
                      <button 
                         onClick={() => setEditingStoreItem({ type: 'frame' })} 
                         className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
                      >
-                        <Plus size={14} /> إضافة عنصر
+                        <Plus size={14} /> إضافة
                      </button>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                      {storeItems.map((item) => (
-                        <div key={item.id} className="bg-slate-900 p-4 rounded-xl border border-white/5 flex flex-col items-center gap-3 relative group">
-                           <div className="absolute top-2 right-2 flex gap-1 opacity-100">
-                              <button onClick={() => setEditingStoreItem(item)} className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30"><Edit2 size={14} /></button>
-                              <button onClick={() => handleDeleteStoreItem(item.id)} className="p-1.5 bg-red-500/80 text-white rounded-lg hover:bg-red-600" title="حذف"><Trash2 size={14} /></button>
+                        <div key={item.id} className="bg-slate-900 p-3 md:p-4 rounded-xl border border-white/5 flex flex-col items-center gap-3 relative group">
+                           <div className="absolute top-2 right-2 flex gap-1 opacity-100 z-10">
+                              <button onClick={() => setEditingStoreItem(item)} className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30"><Edit2 size={12} /></button>
+                              <button onClick={() => handleDeleteStoreItem(item.id)} className="p-1.5 bg-red-500/80 text-white rounded-lg hover:bg-red-600" title="حذف"><Trash2 size={12} /></button>
                            </div>
 
                            <div className="w-16 h-16 bg-black/40 rounded-full flex items-center justify-center overflow-hidden border border-white/5 mt-4">
@@ -582,9 +582,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                  <div className="w-12 h-8 rounded text-[8px] flex items-center justify-center text-white" style={{ background: `url(${item.url}) center/cover` }}>تجربة</div>
                               )}
                            </div>
-                           <div className="text-center">
-                              <h4 className="font-bold text-sm text-white">{item.name}</h4>
-                              <p className="text-xs text-slate-400">{item.type === 'frame' ? 'إطار' : 'فقاعة'}</p>
+                           <div className="text-center w-full">
+                              <h4 className="font-bold text-xs md:text-sm text-white truncate w-full">{item.name}</h4>
+                              <p className="text-[10px] text-slate-400">{item.type === 'frame' ? 'إطار' : 'فقاعة'}</p>
                               <p className="text-yellow-400 font-bold text-xs mt-1">{item.price} 🪙</p>
                            </div>
                         </div>
@@ -594,7 +594,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   {/* Store Edit Modal */}
                   {editingStoreItem && (
                      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                        <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-blue-500/50 p-6 space-y-4">
+                        <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-blue-500/50 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
                            <h3 className="font-bold text-lg text-white">{editingStoreItem.id ? 'تعديل العنصر' : 'إضافة عنصر جديد'}</h3>
                            
                            <div>
@@ -655,7 +655,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                             onChange={(e) => handleItemImageUpload(e, setEditingStoreItem, 'url')}
                                          />
                                      </label>
-                                     <p className="text-[9px] text-slate-500 mt-1">لأفضل نتيجة، استخدم صور PNG بخلفية شفافة</p>
+                                     <p className="text-[9px] text-slate-500 mt-1">يفضل صور PNG بخلفية شفافة</p>
                                  </div>
                               </div>
                            </div>
@@ -677,7 +677,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                      <Gamepad2 size={20} className="text-green-500" /> إعدادات ألعاب الكازينو
                   </h3>
                    
-                   <div className="bg-slate-900 p-6 rounded-2xl border border-white/5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <div className="bg-slate-900 p-4 md:p-6 rounded-2xl border border-white/5 grid grid-cols-1 md:grid-cols-2 gap-6">
                      <div className="p-4 bg-slate-950 rounded-xl border border-white/5">
                         <div className="flex items-center gap-3 mb-4">
                            <span className="text-2xl">🎰</span>
@@ -777,15 +777,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   </h3>
                   <div className="space-y-3">
                      {rooms.map(room => (
-                        <div key={room.id} className="bg-slate-900 p-4 rounded-xl border border-white/5 flex justify-between items-center">
-                           <div className="flex items-center gap-3">
+                        <div key={room.id} className="bg-slate-900 p-3 md:p-4 rounded-xl border border-white/5 flex flex-col md:flex-row justify-between items-center gap-3">
+                           <div className="flex items-center gap-3 w-full md:w-auto">
                               <img src={room.thumbnail} className="w-12 h-12 rounded-lg object-cover" />
-                              <div>
-                                 <h4 className="font-bold text-sm text-white">{room.title}</h4>
-                                 <p className="text-[10px] text-slate-400">ID: {room.id} | المالك: {room.speakers[0]?.name}</p>
+                              <div className="min-w-0">
+                                 <h4 className="font-bold text-sm text-white truncate">{room.title}</h4>
+                                 <p className="text-[10px] text-slate-400 truncate">ID: {room.id} | المالك: {room.speakers[0]?.name}</p>
                               </div>
                            </div>
-                           <div className="flex items-center gap-2">
+                           <div className="flex items-center gap-2 w-full md:w-auto justify-end">
                               <div className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400">{room.category}</div>
                               <button onClick={() => handleDeleteRoom(room.id)} className="p-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20">
                                  <Trash2 size={16} />
@@ -799,21 +799,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {activeTab === 'users' && (
                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-                  <div className="flex gap-2 mb-2">
+                  <div className="flex flex-col md:flex-row gap-2 mb-2">
                      <div className="flex-1 flex gap-2 bg-slate-900 p-2 rounded-xl border border-white/5">
                         <Search className="text-slate-500 ml-2" />
                         <input type="text" placeholder="بحث عن مستخدم..." className="bg-transparent w-full outline-none text-sm" />
                      </div>
                      <button 
                         onClick={() => setIdSearchModalOpen(true)}
-                        className="bg-green-600 hover:bg-green-700 text-white px-4 rounded-xl flex items-center gap-2 font-bold text-sm"
+                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 font-bold text-sm whitespace-nowrap"
                      >
                         <Wallet size={16} /> شحن عبر ID
                      </button>
                   </div>
                   
-                  <div className="bg-slate-900 rounded-2xl border border-white/5 overflow-hidden">
-                     <table className="w-full text-right text-xs">
+                  <div className="bg-slate-900 rounded-2xl border border-white/5 overflow-hidden overflow-x-auto">
+                     <table className="w-full text-right text-xs min-w-[600px]">
                         <thead className="bg-white/5 text-slate-400 font-bold">
                            <tr>
                               <th className="p-3">المستخدم</th>
@@ -828,12 +828,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                            {localUsers.map(u => (
                               <tr key={u.id}>
                                  <td className="p-3 font-bold flex items-center gap-2">
-                                    <div className="w-6 h-6 rounded-full bg-slate-700"></div>
-                                    {u.name}
+                                    <div className="w-6 h-6 rounded-full bg-slate-700 flex-shrink-0"></div>
+                                    <span className="truncate max-w-[100px]">{u.name}</span>
                                  </td>
-                                 <td className="p-3 font-mono text-slate-500 flex items-center gap-1">
-                                    {u.isSpecialId && <Sparkles size={10} className="text-amber-400" />}
-                                    <span className={u.isSpecialId ? "text-amber-400 font-bold italic" : ""}>{u.id}</span>
+                                 <td className="p-3 font-mono text-slate-500">
+                                    <div className="flex items-center gap-1">
+                                       {u.isSpecialId && <Sparkles size={10} className="text-amber-400" />}
+                                       <span className={u.isSpecialId ? "text-amber-400 font-bold italic" : ""}>{u.id}</span>
+                                    </div>
                                  </td>
                                  <td className="p-3">{u.level}</td>
                                  <td className="p-3 text-yellow-400 font-mono">{u.coins.toLocaleString()}</td>
@@ -842,23 +844,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                        {u.status === 'active' ? 'نشط' : 'محظور'}
                                     </span>
                                  </td>
-                                 <td className="p-3 flex gap-2">
-                                    <button onClick={() => handleBanUser(u.id)} className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20">
-                                       <Ban size={14} />
-                                    </button>
-                                    <button 
-                                       onClick={() => openChargeModal(u)} 
-                                       className="p-1.5 bg-yellow-500/10 text-yellow-400 rounded hover:bg-yellow-500/20 flex items-center gap-1 font-bold"
-                                    >
-                                       <Coins size={14} />
-                                    </button>
-                                    <button 
-                                       onClick={() => openIdChangeModal(u)} 
-                                       className="p-1.5 bg-purple-500/10 text-purple-400 rounded hover:bg-purple-500/20 flex items-center gap-1 font-bold"
-                                       title="تغيير المعرف"
-                                    >
-                                       <Hash size={14} />
-                                    </button>
+                                 <td className="p-3">
+                                    <div className="flex gap-2">
+                                       <button onClick={() => handleBanUser(u.id)} className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20">
+                                          <Ban size={14} />
+                                       </button>
+                                       <button 
+                                          onClick={() => openChargeModal(u)} 
+                                          className="p-1.5 bg-yellow-500/10 text-yellow-400 rounded hover:bg-yellow-500/20 flex items-center gap-1 font-bold"
+                                       >
+                                          <Coins size={14} />
+                                       </button>
+                                       <button 
+                                          onClick={() => openIdChangeModal(u)} 
+                                          className="p-1.5 bg-purple-500/10 text-purple-400 rounded hover:bg-purple-500/20 flex items-center gap-1 font-bold"
+                                          title="تغيير المعرف"
+                                       >
+                                          <Hash size={14} />
+                                       </button>
+                                    </div>
                                  </td>
                               </tr>
                            ))}

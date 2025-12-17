@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Home, User as UserIcon, Plus, Bell, Crown, Gem, Settings, ChevronRight, Edit3, Share2, LogOut, Shield, Database, ShoppingBag, Camera, Trophy, Flame, Sparkles } from 'lucide-react';
 import RoomCard from './components/RoomCard';
 import VoiceRoom from './components/VoiceRoom';
@@ -13,6 +13,8 @@ import MiniPlayer from './components/MiniPlayer';
 import { MOCK_ROOMS, CURRENT_USER, VIP_LEVELS, GIFTS as INITIAL_GIFTS, STORE_ITEMS, MOCK_CONTRIBUTORS } from './constants';
 import { Room, User, VIPPackage, UserLevel, Gift, StoreItem, GameSettings } from './types';
 import { AnimatePresence } from 'framer-motion';
+import { db } from './services/firebase';
+import { collection, onSnapshot, addDoc, updateDoc, doc, setDoc } from 'firebase/firestore';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'profile' | 'rank'>('home');
@@ -21,7 +23,7 @@ export default function App() {
   const [isUserMuted, setIsUserMuted] = useState(true); // Track mute state at App level for persistence during minimize
 
   const [user, setUser] = useState<User>(CURRENT_USER);
-  const [rooms, setRooms] = useState<Room[]>(MOCK_ROOMS);
+  const [rooms, setRooms] = useState<Room[]>([]); // Initialize empty, fetch from Firebase
   const [vipLevels, setVipLevels] = useState<VIPPackage[]>(VIP_LEVELS);
   const [gifts, setGifts] = useState<Gift[]>(INITIAL_GIFTS);
   const [storeItems, setStoreItems] = useState<StoreItem[]>(STORE_ITEMS);
@@ -43,13 +45,41 @@ export default function App() {
      luckyGiftRefundPercent: 200 // Return 2x the cost (200%) if won
   });
 
+  // --- FIREBASE SYNC ---
+  useEffect(() => {
+    // Subscribe to rooms collection
+    const unsubscribe = onSnapshot(collection(db, "rooms"), (snapshot) => {
+      const fetchedRooms = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Room[];
+      setRooms(fetchedRooms);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const handleRoomJoin = (room: Room) => {
     setCurrentRoom(room);
     setIsRoomMinimized(false);
     setIsUserMuted(true); // Reset mute on join
+    
+    // Update listeners count in Firebase (Simple increment simulation)
+    // In a real app, you'd add the user ID to a subcollection
+    const roomRef = doc(db, "rooms", room.id);
+    updateDoc(roomRef, {
+        listeners: (room.listeners || 0) + 1
+    }).catch(console.error);
   };
 
   const handleRoomLeave = () => {
+    if (currentRoom) {
+        // Decrement listeners count
+        const roomRef = doc(db, "rooms", currentRoom.id);
+        updateDoc(roomRef, {
+            listeners: Math.max(0, (currentRoom.listeners || 1) - 1)
+        }).catch(console.error);
+    }
     setCurrentRoom(null);
     setIsRoomMinimized(false);
   };
@@ -67,27 +97,39 @@ export default function App() {
      addToast("تم تحديث الملف الشخصي بنجاح", 'success');
   };
 
-  const handleCreateRoom = (roomData: Pick<Room, 'title' | 'category' | 'thumbnail' | 'background'>) => {
-     const newRoom: Room = {
-        id: `room_${Date.now()}`,
+  const handleCreateRoom = async (roomData: Pick<Room, 'title' | 'category' | 'thumbnail' | 'background'>) => {
+     const newRoomData: Omit<Room, 'id'> = {
         ...roomData,
         hostId: user.id,
         listeners: 0,
         speakers: [user] // Creator starts as a speaker/host
      };
      
-     setRooms(prev => [newRoom, ...prev]);
-     setCurrentRoom(newRoom);
-     setIsRoomMinimized(false);
-     addToast('تم إنشاء الغرفة بنجاح!', 'success');
+     try {
+        const docRef = await addDoc(collection(db, "rooms"), newRoomData);
+        // We don't need to manually setRooms because onSnapshot will catch it
+        const newRoomWithId = { id: docRef.id, ...newRoomData } as Room;
+        setCurrentRoom(newRoomWithId);
+        setIsRoomMinimized(false);
+        addToast('تم إنشاء الغرفة بنجاح!', 'success');
+     } catch (e) {
+        console.error("Error adding room: ", e);
+        addToast('حدث خطأ أثناء إنشاء الغرفة', 'error');
+     }
   };
   
-  const handleUpdateRoom = (roomId: string, updatedData: Partial<Room>) => {
-     setRooms(prev => prev.map(r => r.id === roomId ? { ...r, ...updatedData } : r));
-     if (currentRoom && currentRoom.id === roomId) {
-        setCurrentRoom(prev => prev ? { ...prev, ...updatedData } : null);
+  const handleUpdateRoom = async (roomId: string, updatedData: Partial<Room>) => {
+     try {
+        const roomRef = doc(db, "rooms", roomId);
+        await updateDoc(roomRef, updatedData);
+        if (currentRoom && currentRoom.id === roomId) {
+           setCurrentRoom(prev => prev ? { ...prev, ...updatedData } : null);
+        }
+        addToast("تم تحديث إعدادات الغرفة", "success");
+     } catch (e) {
+        console.error(e);
+        addToast("فشل تحديث الغرفة", "error");
      }
-     addToast("تم تحديث إعدادات الغرفة", "success");
   };
 
   const handleBuyVIP = (pkg: VIPPackage) => {
@@ -320,7 +362,7 @@ export default function App() {
                        ))}
                        {rooms.length === 0 && (
                           <div className="text-center py-8 text-slate-500 border border-dashed border-white/10 rounded-xl text-xs">
-                             لا توجد غرف نشطة حالياً
+                             لا توجد غرف نشطة حالياً. كن أول من ينشئ غرفة!
                           </div>
                        )}
                     </div>
@@ -356,7 +398,7 @@ export default function App() {
              </div>
            )}
 
-           {/* Professional Profile Tab - RESTORED */}
+           {/* Professional Profile Tab */}
            {activeTab === 'profile' && (
              <div className="relative">
                 {/* Header Image (Cover) */}
