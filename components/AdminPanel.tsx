@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Users, Radio, Settings, X, Search, 
   MoreVertical, Ban, Trash2, ShieldAlert, CheckCircle, 
-  Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles, Clover
+  Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles, Clover, Shield
 } from 'lucide-react';
 import { Room, User, UserLevel, VIPPackage, Gift, StoreItem, GameSettings, ItemType } from '../types';
 import { db } from '../services/firebase';
@@ -86,8 +86,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleBanUser = async (userId: string, currentStatus: string) => {
      // --- ADMIN PROTECTION ---
      const targetUser = localUsers.find(u => u.id === userId);
+     
+     // STRICT CHECK: Cannot ban admins
      if (targetUser?.isAdmin) {
-         alert("❌ خطأ: لا يمكن حظر مدير الموقع!");
+         alert("❌ خطأ: هذا الحساب محصن! لا يمكن حظر مدير النظام.");
          return;
      }
 
@@ -171,15 +173,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleAdminBannerUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-         if (event.target?.result) {
-            const newBanner = event.target.result as string;
-            await updateDoc(doc(db, "settings", "global"), { bannerImage: newBanner });
-            alert("تم تحديث البانر الرئيسي بنجاح");
-         }
-      };
-      reader.readAsDataURL(file);
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            if (event.target?.result) {
+                const result = event.target.result as string;
+                await updateDoc(doc(db, "settings", "global"), { bannerImage: result });
+                alert("تم تحديث البانر الرئيسي بنجاح");
+            }
+        };
+        reader.readAsDataURL(file);
     }
   };
 
@@ -193,7 +195,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           const reader = new FileReader();
           reader.onload = (event) => {
               if (event.target?.result) {
-                  // Ensure Base64 isn't too huge or handle compression if this was a real production app with storage
+                  // No compression - direct upload
                   setter((prev: any) => ({ ...prev, [field]: event.target.result }));
               }
           };
@@ -225,7 +227,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     try {
         await setDoc(doc(db, "vip_levels", editingVip.level.toString()), editingVip);
         setEditingVip(null);
-    } catch(e) { alert("فشل الحفظ"); }
+        alert("تم حفظ مستوى VIP");
+    } catch(e) { alert("فشل الحفظ. الصورة قد تكون كبيرة جداً."); }
   };
 
   // --- Gift Handlers ---
@@ -245,7 +248,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     try {
         await setDoc(doc(db, "gifts", giftId), newGift);
         setEditingGift(null);
-    } catch(e) { alert("فشل الحفظ"); }
+        alert("تم حفظ الهدية ونشرها");
+    } catch(e) { alert("فشل الحفظ. الصورة كبيرة جداً."); }
   };
 
   const handleDeleteGift = async (id: string) => {
@@ -275,7 +279,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         alert("تم حفظ العنصر في المتجر بنجاح! سيظهر لجميع المستخدمين.");
     } catch(e) { 
         console.error(e);
-        alert("فشل الحفظ. قد تكون الصورة كبيرة جداً لقاعدة البيانات المباشرة."); 
+        alert("فشل الحفظ. الصورة كبيرة جداً لقاعدة البيانات المباشرة (الحد الأقصى 1MB). حاول رفع صورة أصغر."); 
     }
   };
 
@@ -436,7 +440,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                             onChange={(e) => handleItemImageUpload(e, setEditingVip, 'frameUrl')}
                                          />
                                      </label>
-                                     <p className="text-[9px] text-slate-500 mt-1">يفضل صور PNG بخلفية شفافة</p>
+                                     <p className="text-[9px] text-slate-500 mt-1">يتم رفع الصورة بجودتها الأصلية</p>
                                  </div>
                               </div>
                            </div>
@@ -566,7 +570,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                             onChange={(e) => handleItemImageUpload(e, setEditingGift, 'icon')}
                                          />
                                      </label>
-                                     <p className="text-[9px] text-slate-500 mt-1">اضغط لرفع صورة من جهازك</p>
+                                     <p className="text-[9px] text-slate-500 mt-1">يتم رفع الصورة بجودتها الأصلية</p>
                                  </div>
                               </div>
                            </div>
@@ -711,7 +715,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                             onChange={(e) => handleItemImageUpload(e, setEditingStoreItem, 'url')}
                                          />
                                      </label>
-                                     <p className="text-[9px] text-slate-500 mt-1">اضغط لرفع صورة PNG (يفضل خلفية شفافة)</p>
+                                     <p className="text-[9px] text-slate-500 mt-1">يتم رفع الصورة بجودتها الأصلية</p>
                                  </div>
                               </div>
                            </div>
@@ -878,9 +882,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                  </td>
                                  <td className="p-3">
                                     <div className="flex gap-2">
-                                       <button onClick={() => handleBanUser(u.id, u.status as string)} className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20">
-                                          <Ban size={14} />
-                                       </button>
+                                       {/* Ban Button Logic: Hide if user is Admin */}
+                                       {u.isAdmin ? (
+                                           <div className="p-1.5 bg-blue-500/10 text-blue-400 rounded cursor-not-allowed" title="حساب محصن (Admin)">
+                                              <Shield size={14} />
+                                           </div>
+                                       ) : (
+                                           <button 
+                                              onClick={() => handleBanUser(u.id, u.status as string)} 
+                                              className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20"
+                                              title={u.status === 'active' ? 'حظر المستخدم' : 'فك الحظر'}
+                                           >
+                                              <Ban size={14} />
+                                           </button>
+                                       )}
+                                       
                                        <button 
                                           onClick={() => openChargeModal(u)} 
                                           className="p-1.5 bg-yellow-500/10 text-yellow-400 rounded hover:bg-yellow-500/20 flex items-center gap-1 font-bold"

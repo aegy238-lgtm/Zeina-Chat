@@ -19,8 +19,8 @@ import { collection, onSnapshot, addDoc, updateDoc, doc, setDoc, getDoc, getDocs
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 // --- CONFIGURATION ---
-// ضع هنا البريد الإلكتروني الذي تريده أن يكون مدير التطبيق
-const ADMIN_EMAILS = ["admin@gmail.com"]; 
+// تم تحديث بريد المدير الجديد
+const ADMIN_EMAILS = ["admin@voicechat.com"]; 
 
 export default function App() {
   const [initializing, setInitializing] = useState(true);
@@ -160,7 +160,7 @@ export default function App() {
      if (!currentUserAuth) return;
      const unsubscribe = onSnapshot(doc(db, "users", currentUserAuth.uid), (doc) => {
         if (doc.exists()) {
-           setUser(doc.data() as User);
+           setUser({ id: doc.id, ...doc.data() } as User);
         }
      });
      return () => unsubscribe();
@@ -168,12 +168,22 @@ export default function App() {
 
   // 3. Listen to System Collections (Gifts, Store, VIP, Settings)
   useEffect(() => {
-     const unsubGifts = onSnapshot(collection(db, "gifts"), (snap) => setGifts(snap.docs.map(d => d.data() as Gift)));
-     const unsubStore = onSnapshot(collection(db, "store_items"), (snap) => setStoreItems(snap.docs.map(d => d.data() as StoreItem)));
+     // Explicit mapping ensures IDs are correct even if not stored in the document body properly
+     const unsubGifts = onSnapshot(collection(db, "gifts"), (snap) => {
+         const fetchedGifts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Gift));
+         setGifts(fetchedGifts);
+     });
+
+     const unsubStore = onSnapshot(collection(db, "store_items"), (snap) => {
+         const fetchedItems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as StoreItem));
+         setStoreItems(fetchedItems);
+     });
+
      const unsubVip = onSnapshot(collection(db, "vip_levels"), (snap) => {
-        const vips = snap.docs.map(d => d.data() as VIPPackage);
+        const vips = snap.docs.map(doc => ({ ...doc.data() } as VIPPackage));
         setVipLevels(vips.sort((a,b) => a.level - b.level));
      });
+
      const unsubSettings = onSnapshot(doc(db, "settings", "global"), (doc) => {
         if (doc.exists()) {
            const data = doc.data();
