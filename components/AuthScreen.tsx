@@ -80,6 +80,7 @@ const AuthScreen = () => {
       if (err.code === 'auth/invalid-email') setError('البريد الإلكتروني غير صالح');
       else if (err.code === 'auth/user-not-found') setError('المستخدم غير موجود');
       else if (err.code === 'auth/wrong-password') setError('كلمة المرور غير صحيحة');
+      else if (err.code === 'auth/invalid-credential') setError('بيانات الدخول غير صحيحة (تحقق من البريد وكلمة المرور)');
       else if (err.code === 'auth/email-already-in-use') setError('البريد الإلكتروني مسجل بالفعل');
       else if (err.code === 'auth/weak-password') setError('كلمة المرور ضعيفة (يجب أن تكون 6 أحرف على الأقل)');
       else setError(err.message || 'حدث خطأ غير متوقع');

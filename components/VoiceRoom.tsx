@@ -215,7 +215,36 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
       return;
     }
 
-    // 2. Lucky Gift Logic Calculation
+    const finalRecipientId = recipientId || giftRecipientId;
+    
+    // Determine recipient name for chat
+    let recipientName = 'الجميع';
+    if (finalRecipientId) {
+       const targetUser = seats.find(s => s?.id === finalRecipientId);
+       if (targetUser) recipientName = targetUser.name;
+    }
+
+    // --- OPTIMISTIC UI UPDATES (Fast Response) ---
+    
+    // 1. Close Modal Immediately
+    setShowGiftModal(false);
+
+    // 2. Activate Combo Button Immediately with the selected gift
+    setComboState({
+       gift: gift,
+       recipientId: finalRecipientId,
+       quantity: quantity,
+       timer: 3, 
+       active: true
+    });
+
+    // 3. Trigger Visual Effect Immediately
+    setActiveGiftEffect(gift);
+    setTimeout(() => setActiveGiftEffect(null), 3000);
+
+    // --- BACKGROUND LOGIC ---
+
+    // 4. Lucky Gift Logic Calculation
     let refundAmount = 0;
     let isLuckyWin = false;
 
@@ -224,10 +253,13 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
        if (chance < gameSettings.luckyGiftWinRate) {
            isLuckyWin = true;
            refundAmount = Math.floor(totalCost * (gameSettings.luckyGiftRefundPercent / 100));
+           
+           // Show lucky win strip
+           if (luckyWinTimeoutRef.current) clearTimeout(luckyWinTimeoutRef.current);
+           setLuckyWinAmount(refundAmount);
+           luckyWinTimeoutRef.current = setTimeout(() => setLuckyWinAmount(0), 4000);
        }
     }
-
-    const finalRecipientId = recipientId || giftRecipientId;
 
     try {
         // --- 1. Update User Documents (Balances) ---
@@ -239,14 +271,14 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
         // Update Recipient: Increase Charm (if specific recipient)
         if (finalRecipientId) {
-           await updateDoc(doc(db, "users", finalRecipientId), {
+           // We use updateDoc without await to not block if not needed immediately
+           updateDoc(doc(db, "users", finalRecipientId), {
                charm: increment(totalCost)
-           });
+           }).catch(console.error);
         }
 
-        // --- 2. CRITICAL: Update Room Speakers Array (Real-time Visuals) ---
-        // We need to fetch the latest room state to ensure we don't overwrite other changes
-        // and update the speakers array with new Wealth/Charm values so the numbers change instantly.
+        // --- 2. Update Room Speakers Array (Real-time Visuals) ---
+        // Fetch fresh room data to update stats
         const roomRef = doc(db, "rooms", room.id);
         const roomSnap = await getDoc(roomRef);
         
@@ -276,58 +308,27 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
             await updateDoc(roomRef, { speakers: updatedSpeakers });
         }
 
-    } catch(e) { console.error("Gift Transaction Failed", e); return; }
+        // --- 3. Add Chat Message ---
+        const content = quantity > 1 
+          ? `أرسل ${gift.name} x${quantity} إلى ${recipientName}` 
+          : `أرسل ${gift.name} إلى ${recipientName}`;
 
-    // Handle Lucky Win Visuals
-    if (isLuckyWin) {
-       if (luckyWinTimeoutRef.current) clearTimeout(luckyWinTimeoutRef.current);
-       setLuckyWinAmount(refundAmount);
-       luckyWinTimeoutRef.current = setTimeout(() => setLuckyWinAmount(0), 4000);
-    }
-
-    setShowGiftModal(false);
-    
-    // Determine recipient name
-    let recipientName = 'الجميع';
-    if (finalRecipientId) {
-       const targetUser = seats.find(s => s?.id === finalRecipientId);
-       if (targetUser) recipientName = targetUser.name;
-    }
-
-    // Trigger visual effect
-    setActiveGiftEffect(gift);
-    setTimeout(() => setActiveGiftEffect(null), 3000);
-
-    // Add Message to Firebase
-    const content = quantity > 1 
-      ? `أرسل ${gift.name} x${quantity} إلى ${recipientName}` 
-      : `أرسل ${gift.name} إلى ${recipientName}`;
-
-    const giftMessage = {
-      userId: currentUser.id,
-      userName: currentUser.name,
-      userLevel: currentUser.level,
-      userNameStyle: currentUser.nameStyle || '',
-      content: content,
-      type: 'gift',
-      giftData: gift,
-      isLuckyWin: isLuckyWin,
-      winAmount: refundAmount,
-      timestamp: serverTimestamp()
-    };
-    
-    try {
+        const giftMessage = {
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userLevel: currentUser.level,
+          userNameStyle: currentUser.nameStyle || '',
+          content: content,
+          type: 'gift',
+          giftData: gift,
+          isLuckyWin: isLuckyWin,
+          winAmount: refundAmount,
+          timestamp: serverTimestamp()
+        };
+        
         await addDoc(collection(db, "rooms", room.id, "messages"), giftMessage);
-    } catch(e) { console.error(e); }
-    
-    // 4. Activate Combo Button
-    setComboState({
-       gift: gift,
-       recipientId: finalRecipientId,
-       quantity: quantity,
-       timer: 3, 
-       active: true
-    });
+
+    } catch(e) { console.error("Gift Transaction Failed", e); }
   };
 
   const handleComboClick = () => {
@@ -413,18 +414,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     }
   };
   
-  // Custom leave seat function
-  const handleLeaveSeat = async () => {
-      // Optimistic remove
-      const updatedSeats = seats.map(s => s?.id === currentUser.id ? null : s);
-      setSeats(updatedSeats);
-      
-      const updatedSpeakers = room.speakers.filter(s => s.id !== currentUser.id);
-      updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers }).catch(err => {
-         console.error("Leave Seat Error", err);
-      });
-  };
-
   const handleResetCounters = async () => {
       const amISitting = room.speakers.some(s => s.id === currentUser.id);
       if (!amISitting) {
@@ -496,8 +485,10 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
               onLeave();
           }
       } else {
-          // Logic for Guests
-          onLeave();
+          // Logic for Guests - Add confirmation for safety
+          if (confirm("هل تريد مغادرة الغرفة؟")) {
+              onLeave();
+          }
       }
   };
 
@@ -794,25 +785,36 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                animate={{ scale: 1, opacity: 1 }}
                exit={{ scale: 0, opacity: 0 }}
                onClick={handleComboClick}
-               className="absolute bottom-28 left-4 z-50 flex flex-col items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 shadow-[0_0_20px_rgba(236,72,153,0.6)] border-4 border-white/20 active:scale-95 cursor-pointer"
+               className="absolute bottom-28 left-4 z-50 flex flex-col items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 shadow-[0_0_20px_rgba(236,72,153,0.6)] border-4 border-white/20 active:scale-95 cursor-pointer"
             >
                <svg className="absolute inset-0 w-full h-full -rotate-90">
                   <circle
-                     cx="32" cy="32" r="30"
+                     cx="40" cy="40" r="36"
                      className="stroke-white/20 fill-none stroke-[4]"
                   />
                   <circle
-                     cx="32" cy="32" r="30"
+                     cx="40" cy="40" r="36"
                      className="stroke-yellow-400 fill-none stroke-[4] transition-all duration-100 ease-linear"
-                     strokeDasharray="188"
-                     strokeDashoffset={188 - (188 * comboState.timer / 3)}
+                     strokeDasharray="226"
+                     strokeDashoffset={226 - (226 * comboState.timer / 3)}
                   />
                </svg>
                
-               <div className="relative z-10 flex flex-col items-center">
-                  <span className="text-[8px] font-bold text-white uppercase tracking-wider">Combo</span>
-                  <div className="text-lg font-black text-white leading-none">x{comboState.quantity}</div>
-                  <span className="text-[10px] text-yellow-300 font-bold">{comboState.timer.toFixed(1)}</span>
+               <div className="relative z-10 flex flex-col items-center justify-center -mt-1">
+                  {/* Gift Icon inside Combo Button */}
+                  <div className="w-8 h-8 flex items-center justify-center mb-0.5 filter drop-shadow-md">
+                      {comboState.gift.icon.startsWith('http') || comboState.gift.icon.startsWith('data:') ? (
+                          <img src={comboState.gift.icon} className="w-full h-full object-contain" alt="gift" />
+                      ) : (
+                          <span className="text-2xl leading-none">{comboState.gift.icon}</span>
+                      )}
+                  </div>
+                  
+                  <div className="flex items-center justify-center leading-none">
+                     <span className="text-[10px] font-bold text-white/80 mr-0.5">x</span>
+                     <span className="text-xl font-black text-white italic">{comboState.quantity}</span>
+                  </div>
+                  <span className="text-[9px] text-yellow-300 font-bold mt-0.5">{comboState.timer.toFixed(1)}</span>
                </div>
             </motion.button>
          )}

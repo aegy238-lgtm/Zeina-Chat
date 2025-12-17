@@ -173,12 +173,19 @@ export default function App() {
           } else {
               // Update local room data if needed (e.g. speakers changed)
               // We rely on VoiceRoom internal listeners mostly, but this ensures App state is somewhat fresh
-              if (JSON.stringify(roomExists.speakers) !== JSON.stringify(currentRoom.speakers)) {
+              
+              // Helper to generate a stable signature for speakers to avoid JSON.stringify circular errors
+              // Fixes: Uncaught TypeError: Converting circular structure to JSON
+              const getSpeakersHash = (speakers: User[]) => {
+                  return speakers.map(s => `${s.id}_${s.seatIndex}_${s.isMuted}_${s.wealth}_${s.charm}`).join('|');
+              };
+
+              if (getSpeakersHash(roomExists.speakers) !== getSpeakersHash(currentRoom.speakers)) {
                   setCurrentRoom(roomExists);
               }
           }
       }
-  }, [rooms]); // Dependency on rooms array updates
+  }, [rooms, currentRoom]); // Dependency on rooms array updates
 
   // 2. Listen to Current User (if logged in)
   useEffect(() => {
