@@ -345,7 +345,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         cost: Number(editingGift.cost),
         icon: editingGift.icon || '🎁',
         animationType: editingGift.animationType || 'pop',
-        isLucky: editingGift.isLucky || false
+        isLucky: editingGift.isLucky || false,
+        category: editingGift.category || 'popular' // Save the explicit category
     };
 
     try {
@@ -637,7 +638,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         <GiftIcon size={20} className="text-pink-500" /> إدارة الهدايا
                      </h3>
                      <button 
-                        onClick={() => setEditingGift({})} 
+                        onClick={() => setEditingGift({ category: 'popular' })} 
                         className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
                      >
                         <Plus size={14} /> إضافة
@@ -676,6 +677,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                  {gift.isLucky && <Clover size={10} className="text-green-500 flex-shrink-0" fill="currentColor" />}
                               </h4>
                               <p className="text-yellow-400 font-bold text-xs">{gift.cost} 🪙</p>
+                              <span className="text-[8px] opacity-50 block uppercase">{gift.category || 'popular'}</span>
                            </div>
                         </div>
                      ))}
@@ -686,6 +688,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                         <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-pink-500/50 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
                            <h3 className="font-bold text-lg text-white">{editingGift.id ? 'تعديل الهدية' : 'إضافة هدية جديدة'}</h3>
+                           
+                           {/* Category Selection Dropdown */}
+                           <div>
+                              <label className="text-xs text-slate-400 mb-1 block">القسم (البند في الصندوق)</label>
+                              <select 
+                                 value={editingGift.category || 'popular'}
+                                 onChange={e => setEditingGift({...editingGift, category: e.target.value as any})}
+                                 className="w-full bg-slate-800 border border-white/10 rounded-lg p-2 text-white text-sm"
+                              >
+                                 <option value="popular">شائع (Popular)</option>
+                                 <option value="exclusive">مميز (Exclusive)</option>
+                                 <option value="lucky">الحظ (Lucky)</option>
+                              </select>
+                           </div>
+
                            <div className="grid grid-cols-2 gap-4">
                               <div>
                                  <label className="text-xs text-slate-400">الاسم</label>

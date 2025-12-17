@@ -8,31 +8,35 @@ interface WinStripProps {
 
 const WinStrip: React.FC<WinStripProps> = ({ amount }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playPromiseRef = useRef<Promise<void> | null>(null);
   
-  // Effect for Initialization and Cleanup (Unmount)
   useEffect(() => {
-    // Create Audio object once
     const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3');
     audio.volume = 0.5;
-    audio.loop = true; // Loop sound continuously
+    audio.loop = true;
     audioRef.current = audio;
 
-    // Cleanup: Stop audio only when the COMPONENT unmounts (strip disappears)
     return () => {
-      audio.pause();
-      audio.currentTime = 0;
+      if (playPromiseRef.current) {
+         playPromiseRef.current.then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+         }).catch(() => {});
+      } else {
+         audio.pause();
+         audio.currentTime = 0;
+      }
     };
   }, []);
 
-  // Effect for triggering Play based on amount updates
   useEffect(() => {
     const audio = audioRef.current;
     if (audio && amount >= 5000) {
-      // If valid amount and not playing, start playing.
-      // If already playing (from previous combo hit), this does nothing, 
-      // ensuring the sound continues smoothly without resetting.
       if (audio.paused) {
-         audio.play().catch(err => console.error("Audio play failed", err));
+         playPromiseRef.current = audio.play();
+         playPromiseRef.current.catch(err => {
+            console.warn("Audio play interrupted or failed", err);
+         });
       }
     }
   }, [amount]);
@@ -72,7 +76,6 @@ const WinStrip: React.FC<WinStripProps> = ({ amount }) => {
          </motion.span>
       </div>
       
-      {/* Glow Effect Behind */}
       <div className="absolute inset-0 bg-yellow-400 blur-xl opacity-40 -z-10 rounded-full animate-pulse"></div>
     </motion.div>
   );

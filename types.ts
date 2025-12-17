@@ -15,28 +15,24 @@ export interface StoreItem {
   name: string;
   type: ItemType;
   price: number;
-  url: string; // Image URL
+  url: string;
 }
 
 export interface User {
   id: string;
-  customId: number; // New Sequential Unique ID (e.g. 10001)
+  customId: number;
   name: string;
   avatar: string;
   level: UserLevel;
-  frame?: string; // URL to frame image
-  activeBubble?: string; // URL to active chat bubble image
-  cover?: string; // Cover/Header image URL
+  frame?: string;
+  activeBubble?: string;
+  cover?: string;
   coins: number;
-  
-  // New Stats
-  wealth: number; // XP from sending gifts
-  charm: number;  // XP from receiving gifts
-  
+  wealth: number;
+  charm: number;
   isVip: boolean;
-  vipLevel?: number; // 1 to 12
-  nameStyle?: string; // CSS class for animated/colored name
-  
+  vipLevel?: number;
+  nameStyle?: string;
   bio?: string;
   gender?: 'male' | 'female';
   stats?: {
@@ -45,22 +41,26 @@ export interface User {
     following: number;
     followers: number;
   };
-  ownedItems?: string[]; // IDs of owned items
+  ownedItems?: string[];
   isFollowing?: boolean;
   isMuted?: boolean;
-  isSpecialId?: boolean; // New property for Special IDs
-  isAdmin?: boolean; // New property for Admin Access
-  seatIndex?: number; // Position on the mic (0-7)
-  // Added status to fix errors in AdminPanel where status property was accessed but not defined on User
+  isSpecialId?: boolean;
+  isAdmin?: boolean;
+  seatIndex?: number;
   status?: string;
 }
 
-export interface Contributor {
+export interface GlobalAnnouncement {
   id: string;
-  name: string;
-  avatar: string;
-  amount: number; // Contribution amount
-  rank: number;
+  senderName: string;
+  recipientName: string;
+  giftName: string;
+  giftIcon: string;
+  roomTitle: string;
+  roomId: string;
+  type: 'gift' | 'lucky_win';
+  amount: number;
+  timestamp: any;
 }
 
 export interface Gift {
@@ -69,7 +69,8 @@ export interface Gift {
   icon: string;
   cost: number;
   animationType: 'pop' | 'fly' | 'full-screen';
-  isLucky?: boolean; // New Flag for Lucky Gifts
+  isLucky?: boolean;
+  category?: 'popular' | 'exclusive' | 'lucky';
 }
 
 export interface VIPPackage {
@@ -78,7 +79,7 @@ export interface VIPPackage {
   cost: number;
   frameUrl: string;
   color: string;
-  nameStyle: string; // CSS classes for the name effect
+  nameStyle: string;
 }
 
 export interface ChatMessage {
@@ -86,12 +87,12 @@ export interface ChatMessage {
   userId: string;
   userName: string;
   userLevel: UserLevel;
-  userNameStyle?: string; // For VIP names in chat
+  userNameStyle?: string;
   content: string;
   type: 'text' | 'gift' | 'system';
   giftData?: Gift;
-  bubbleUrl?: string; // Custom bubble style
-  isLuckyWin?: boolean; // Did this message trigger a lucky win?
+  bubbleUrl?: string;
+  isLuckyWin?: boolean;
   winAmount?: number;
 }
 
@@ -102,15 +103,15 @@ export interface Room {
   hostId: string;
   listeners: number;
   thumbnail: string;
-  speakers: User[]; // Initial list of speakers
+  speakers: User[];
   background: string;
 }
 
 export interface GameSettings {
-  slotsWinRate: number; // For Slots Game
-  wheelWinRate: number; // For Wheel Game
-  luckyGiftWinRate: number; // Chance to trigger lucky return (0-100%)
-  luckyGiftRefundPercent: number; // Multiplier of cost returned (e.g., 500% for x5 win)
+  slotsWinRate: number;
+  wheelWinRate: number;
+  luckyGiftWinRate: number;
+  luckyGiftRefundPercent: number;
 }
 
 export interface WheelItem {
@@ -119,11 +120,22 @@ export interface WheelItem {
   color: string;
   icon: string;
   multiplier: number;
-  probability: number; // Relative weight
+  probability: number;
 }
 
 export interface SlotItem {
   id: string;
   icon: string;
   multiplier: number;
+}
+
+/**
+ * Interface for top donors/contributors shown on the home screen.
+ */
+export interface Contributor {
+  id: string;
+  name: string;
+  avatar: string;
+  amount: number;
+  rank: number;
 }

@@ -1,9 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Room, User, ChatMessage, Gift, UserLevel, GameSettings } from '../types';
-import { CURRENT_USER } from '../constants';
-import { Mic, MicOff, Gift as GiftIcon, X, Send, Heart, Crown, Shield, Lock, Check, LayoutGrid, Gamepad2, Settings, ChevronDown, Clover, Repeat, Gem, RotateCcw, AlertTriangle, Sparkles } from 'lucide-react';
-import { generateSimulatedChat, generateSystemAnnouncement } from '../services/geminiService';
+import { Mic, MicOff, Gift as GiftIcon, X, Send, LayoutGrid, Gamepad2, Settings, ChevronDown, Clover, Sparkles, RotateCcw, LogOut, ShieldCheck, Gem, Timer, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import UserProfileSheet from './UserProfileSheet';
 import Toast, { ToastMessage } from './Toast';
@@ -13,7 +11,7 @@ import GameCenterModal from './GameCenterModal';
 import RoomSettingsModal from './RoomSettingsModal';
 import WinStrip from './WinStrip';
 import { db } from '../services/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit, updateDoc, doc, increment, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit, updateDoc, doc, increment, getDoc, writeBatch } from 'firebase/firestore';
 
 interface VoiceRoomProps {
   room: Room;
@@ -30,480 +28,272 @@ interface VoiceRoomProps {
 }
 
 interface ComboState {
-  gift: Gift;
+  gift: Gift | null;
   recipientId: string | null;
-  quantity: number;
   timer: number;
+  count: number;
   active: boolean;
 }
 
-const GIFT_MULTIPLIERS = [1, 10, 20, 50, 99];
+const GIFT_MULTIPLIERS = [1, 10, 20, 50, 99, 100, 520, 999, 1314];
 
 const VoiceRoom: React.FC<VoiceRoomProps> = ({ 
-  room, onLeave, onMinimize, currentUser, onUpdateUser, gifts, onEditProfile, gameSettings, onUpdateRoom, isMuted, onToggleMute 
+  room, onLeave, onMinimize, currentUser, gifts, gameSettings, onUpdateRoom, isMuted, onToggleMute 
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
-  
-  // Local state for visual seats mapping. 
-  const [seats, setSeats] = useState<(User | null)[]>(new Array(8).fill(null));
-
+  const [localSeats, setLocalSeats] = useState<(User | null)[]>(new Array(8).fill(null));
   const [showGiftModal, setShowGiftModal] = useState(false);
+  const [giftTab, setGiftTab] = useState<'popular' | 'exclusive' | 'lucky'>('popular');
   const [showMenuModal, setShowMenuModal] = useState(false);
-  
-  // Game States
   const [showGameCenter, setShowGameCenter] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [activeGame, setActiveGame] = useState<'wheel' | 'slots' | null>(null);
-
-  const [showRoomSettingsModal, setShowRoomSettingsModal] = useState(false);
-
   const [activeGiftEffect, setActiveGiftEffect] = useState<Gift | null>(null);
   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null);
   const [selectedGiftQuantity, setSelectedGiftQuantity] = useState(1);
-  
+  const [lastSelectedGift, setLastSelectedGift] = useState<Gift | null>(gifts[0] || null);
   const [luckyWinAmount, setLuckyWinAmount] = useState<number>(0);
-  const luckyWinTimeoutRef = useRef<any>(null);
+  
+  const [comboState, setComboState] = useState<ComboState>({ gift: null, recipientId: null, timer: 0, count: 0, active: false });
+  const [isComboPulsing, setIsComboPulsing] = useState(false);
+  const comboTimerRef = useRef<any>(null);
 
-  const [comboState, setComboState] = useState<ComboState>({
-     gift: gifts[0],
-     recipientId: null,
-     quantity: 1,
-     timer: 0,
-     active: false
-  });
-
-  const [entranceBanner, setEntranceBanner] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // --- FIREBASE SYNC: Seats Logic with seatIndex ---
+  const isAdmin = currentUser.isAdmin;
+  const isOwner = currentUser.id === room.hostId;
+
   useEffect(() => {
-     // Ensure seats array reflects the latest room.speakers data
      const newSeats = new Array(8).fill(null);
-     
      if (room.speakers && Array.isArray(room.speakers)) {
         room.speakers.forEach((speaker) => {
-           const pos = (speaker.seatIndex !== undefined && speaker.seatIndex !== null) ? speaker.seatIndex : -1;
+           const pos = speaker.seatIndex ?? -1;
            if (pos >= 0 && pos < 8) newSeats[pos] = speaker;
         });
      }
-     
-     setSeats(newSeats);
+     setLocalSeats(newSeats);
   }, [room.speakers]);
 
-
-  // --- FIREBASE CHAT SYNC ---
   useEffect(() => {
     if (!room.id) return;
-    
     const messagesRef = collection(db, "rooms", room.id, "messages");
-    const q = query(messagesRef, orderBy("timestamp", "asc"), limit(50));
-
+    const q = query(messagesRef, orderBy("timestamp", "asc"), limit(30));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-        const fetchedMessages = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                ...data,
-            } as ChatMessage;
-        });
-        
-        setMessages(prev => fetchedMessages);
+        const fetchedMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
+        setMessages(fetchedMessages);
     });
-
     return () => unsubscribe();
   }, [room.id]);
 
-
-  // Update mute state in Firestore when isMuted prop changes
-  useEffect(() => {
-     const isSpeaker = room.speakers.find(s => s.id === currentUser.id);
-     
-     if (isSpeaker && isSpeaker.isMuted !== isMuted) {
-        const updatedSpeakers = room.speakers.map(s => {
-           if (s.id === currentUser.id) return { ...s, isMuted: isMuted };
-           return s;
-        });
-        
-        updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers }).catch(console.error);
-     }
-  }, [isMuted]); 
-
-  // Auto-scroll chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Entrance Effect
   useEffect(() => {
-    const announceEntrance = async () => {
-       const text = await generateSystemAnnouncement('دخل الغرفة', currentUser.name);
-       setEntranceBanner(text);
-       setTimeout(() => setEntranceBanner(null), 4000);
+    if (comboState.active && comboState.timer > 0) {
+        if (comboTimerRef.current) clearInterval(comboTimerRef.current);
+        comboTimerRef.current = setInterval(() => {
+            setComboState(prev => {
+                if (prev.timer <= 0.05) {
+                    clearInterval(comboTimerRef.current);
+                    return { ...prev, active: false, timer: 0, count: 0 };
+                }
+                return { ...prev, timer: Number((prev.timer - 0.05).toFixed(2)) };
+            });
+        }, 50);
+    }
+    return () => {
+        if (comboTimerRef.current) clearInterval(comboTimerRef.current);
     };
-    announceEntrance();
-  }, []);
+  }, [comboState.active]);
 
-  // Combo Timer Countdown
-  useEffect(() => {
-     let interval: ReturnType<typeof setInterval>;
-     if (comboState.active && comboState.timer > 0) {
-        interval = setInterval(() => {
-           setComboState(prev => {
-              if (prev.timer <= 0.1) {
-                 return { ...prev, active: false, timer: 0 };
-              }
-              return { ...prev, timer: prev.timer - 0.1 };
-           });
-        }, 100);
-     } else if (comboState.timer <= 0) {
-        setComboState(prev => ({...prev, active: false}));
-     }
-     return () => clearInterval(interval);
-  }, [comboState.active, comboState.timer]);
-
-  const addToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
+  const addToast = useCallback((message: string, type: 'success' | 'info' | 'error' = 'info') => {
      const id = Date.now().toString();
      setToasts(prev => [...prev, { id, message, type }]);
-     setTimeout(() => {
-        setToasts(prev => prev.filter(t => t.id !== id));
-     }, 3000);
-  };
+     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 2000);
+  }, []);
 
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
-    
-    const newMessage = {
-      userId: currentUser.id,
-      userName: currentUser.name,
-      userLevel: currentUser.level,
-      userNameStyle: currentUser.nameStyle || '', 
-      content: inputValue,
-      type: 'text',
-      bubbleUrl: currentUser.activeBubble || '',
-      timestamp: serverTimestamp()
-    };
-    
+    const text = inputValue;
+    setInputValue('');
     try {
-        await addDoc(collection(db, "rooms", room.id, "messages"), newMessage);
-        setInputValue('');
-    } catch (e) {
-        console.error("Error sending message", e);
-    }
+        await addDoc(collection(db, "rooms", room.id, "messages"), {
+            userId: currentUser.id, userName: currentUser.name, userLevel: currentUser.level, userNameStyle: currentUser.nameStyle || '', 
+            content: text, type: 'text', bubbleUrl: currentUser.activeBubble || '', timestamp: serverTimestamp()
+        });
+    } catch (e) { console.error(e); }
   };
 
-  const handleSendGift = async (gift: Gift, quantity: number = 1, recipientId: string | null = null) => {
-    const totalCost = gift.cost * quantity;
+  const renderGiftIcon = (icon: string, className: string = "w-full h-full object-contain") => {
+     if (!icon) return null;
+     const isImage = icon.startsWith('http') || icon.startsWith('data:');
+     return isImage ? <img src={icon} className={className} alt="" /> : <span className="text-3xl leading-none">{icon}</span>;
+  };
 
+  const handleSendGift = async (gift: Gift, quantity: number = 1, recipientId: string | null = null, isCombo: boolean = false) => {
+    const totalCost = gift.cost * quantity;
     if (currentUser.coins < totalCost) {
-      addToast('عذراً، رصيدك لا يكفي لإرسال هذه الهدية! 🪙', 'error');
-      setComboState(prev => ({ ...prev, active: false }));
+      addToast('عذراً، رصيدك لا يكفي! 🪙', 'error');
+      setComboState(prev => ({ ...prev, active: false, timer: 0, count: 0 }));
       return;
     }
 
+    if (!isCombo) {
+      setShowGiftModal(false);
+    }
+
     const finalRecipientId = recipientId || giftRecipientId;
-    
     let recipientName = 'الجميع';
     if (finalRecipientId) {
        const targetUser = room.speakers.find(s => s.id === finalRecipientId);
        if (targetUser) recipientName = targetUser.name;
     }
+    
+    setComboState(prev => ({ 
+        gift, 
+        recipientId: finalRecipientId, 
+        timer: 5, 
+        count: isCombo ? prev.count + 1 : 1,
+        active: true 
+    }));
+    
+    setActiveGiftEffect(gift); 
+    setTimeout(() => setActiveGiftEffect(null), 2500);
 
-    setShowGiftModal(false);
+    (async () => {
+        try {
+            const batch = writeBatch(db);
+            let refundAmount = 0;
+            let isLuckyWin = false;
 
-    setComboState({
-       gift: gift,
-       recipientId: finalRecipientId,
-       quantity: quantity,
-       timer: 3, 
-       active: true
-    });
+            if (gift.isLucky && Math.random() * 100 < gameSettings.luckyGiftWinRate) {
+                isLuckyWin = true;
+                refundAmount = Math.floor(totalCost * (gameSettings.luckyGiftRefundPercent / 100));
+                setLuckyWinAmount(refundAmount);
+                setTimeout(() => setLuckyWinAmount(0), 4000);
+            }
 
-    setActiveGiftEffect(gift);
-    setTimeout(() => setActiveGiftEffect(null), 3000);
+            batch.update(doc(db, "users", currentUser.id), { coins: increment(refundAmount - totalCost), wealth: increment(totalCost) });
+            if (finalRecipientId) {
+                batch.update(doc(db, "users", finalRecipientId), { charm: increment(totalCost) });
+                const updatedSpeakers = room.speakers.map(s => s.id === finalRecipientId ? { ...s, charm: (s.charm || 0) + totalCost } : s);
+                batch.update(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
+            }
+            await batch.commit();
 
-    let refundAmount = 0;
-    let isLuckyWin = false;
-
-    if (gift.isLucky) {
-       const chance = Math.random() * 100;
-       if (chance < gameSettings.luckyGiftWinRate) {
-           isLuckyWin = true;
-           refundAmount = Math.floor(totalCost * (gameSettings.luckyGiftRefundPercent / 100));
-           
-           if (luckyWinTimeoutRef.current) clearTimeout(luckyWinTimeoutRef.current);
-           setLuckyWinAmount(refundAmount);
-           luckyWinTimeoutRef.current = setTimeout(() => setLuckyWinAmount(0), 4000);
-       }
-    }
-
-    try {
-        await updateDoc(doc(db, "users", currentUser.id), {
-            coins: increment(refundAmount - totalCost),
-            wealth: increment(totalCost)
-        });
-
-        if (finalRecipientId) {
-           updateDoc(doc(db, "users", finalRecipientId), {
-               charm: increment(totalCost)
-           }).catch(console.error);
-        }
-
-        const roomRef = doc(db, "rooms", room.id);
-        const roomSnap = await getDoc(roomRef);
-        
-        if (roomSnap.exists()) {
-            const currentSpeakers = roomSnap.data().speakers as User[];
-            const updatedSpeakers = currentSpeakers.map(s => {
-                const speakerCopy = { ...s };
-                if (s.id === currentUser.id) {
-                    speakerCopy.wealth = (speakerCopy.wealth || 0) + totalCost;
-                    if (finalRecipientId === currentUser.id) {
-                        speakerCopy.charm = (speakerCopy.charm || 0) + totalCost;
-                    }
-                }
-                if (finalRecipientId && s.id === finalRecipientId && s.id !== currentUser.id) {
-                    speakerCopy.charm = (speakerCopy.charm || 0) + totalCost;
-                }
-                return speakerCopy;
+            await addDoc(collection(db, "rooms", room.id, "messages"), {
+              userId: currentUser.id, userName: currentUser.name, userLevel: currentUser.level, userNameStyle: currentUser.nameStyle || '',
+              content: isLuckyWin ? `ربح ${refundAmount.toLocaleString()} كوينز من ${gift.name}! 🍀` : `أرسل ${gift.name} x${quantity} إلى ${recipientName}`,
+              type: 'gift', giftData: gift, isLuckyWin, winAmount: refundAmount, timestamp: serverTimestamp()
             });
-            await updateDoc(roomRef, { speakers: updatedSpeakers });
-        }
-
-        const content = quantity > 1 
-          ? `أرسل ${gift.name} x${quantity} إلى ${recipientName}` 
-          : `أرسل ${gift.name} إلى ${recipientName}`;
-
-        const giftMessage = {
-          userId: currentUser.id,
-          userName: currentUser.name,
-          userLevel: currentUser.level,
-          userNameStyle: currentUser.nameStyle || '',
-          content: content,
-          type: 'gift',
-          giftData: gift,
-          isLuckyWin: isLuckyWin,
-          winAmount: refundAmount,
-          timestamp: serverTimestamp()
-        };
-        
-        await addDoc(collection(db, "rooms", room.id, "messages"), giftMessage);
-
-    } catch(e) { console.error("Gift Transaction Failed", e); }
+        } catch(e) { console.error(e); }
+    })();
   };
 
   const handleComboClick = () => {
-     if (comboState.active) {
-        setComboState(prev => ({ ...prev, timer: 3 }));
-        handleSendGift(comboState.gift, comboState.quantity, comboState.recipientId);
-     }
+    if (!comboState.active || !comboState.gift) return;
+    setIsComboPulsing(true);
+    setTimeout(() => setIsComboPulsing(false), 200);
+    handleSendGift(comboState.gift, 1, comboState.recipientId, true);
   };
 
   const handleSeatClick = async (index: number) => {
-    const userAtSeat = seats[index];
-    const amISitting = room.speakers.some(s => s.id === currentUser.id);
+    if (!room.id) return;
+    const userAtSeat = localSeats[index];
+    const speakerEntry = room.speakers.find(s => s.id === currentUser.id);
 
     if (userAtSeat) {
-      setSelectedUser(userAtSeat);
+       setSelectedUser(userAtSeat);
     } else {
-      if (amISitting) {
-          const oldIndex = room.speakers.find(s => s.id === currentUser.id)?.seatIndex;
-          if (oldIndex === index) return;
+      const newSpeakerObj = speakerEntry ? { ...speakerEntry, seatIndex: index } : { 
+        id: currentUser.id, name: currentUser.name, avatar: currentUser.avatar, 
+        level: currentUser.level, frame: currentUser.frame || '', 
+        nameStyle: currentUser.nameStyle || '', charm: currentUser.charm || 0,
+        isMuted: false, seatIndex: index 
+      };
 
-          const updatedSpeakers = room.speakers.map(s => {
-              if (s.id === currentUser.id) return { ...s, seatIndex: index };
-              return s;
-          });
-          await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
-          addToast("تم تغيير المقعد", "success");
-      } else {
-          const userRef = doc(db, "users", currentUser.id);
-          const userSnap = await getDoc(userRef);
-          const freshUserData = userSnap.exists() ? { id: userSnap.id, ...userSnap.data() } as User : currentUser;
-          const newSpeakerData = { ...freshUserData, isMuted: false, seatIndex: index };
-          await updateDoc(doc(db, "rooms", room.id), { speakers: [...room.speakers, newSpeakerData] });
+      const tempSeats = [...localSeats];
+      if (speakerEntry) {
+         const oldIdx = localSeats.findIndex(s => s?.id === currentUser.id);
+         if (oldIdx !== -1) tempSeats[oldIdx] = null;
       }
-    }
-  };
-  
-  const handleResetCounters = async () => {
-      const amISitting = room.speakers.some(s => s.id === currentUser.id);
-      if (!amISitting) {
-          addToast("يجب أن تكون على المايك لتصفير العداد", "error");
-          return;
-      }
+      tempSeats[index] = newSpeakerObj;
+      setLocalSeats(tempSeats);
 
-      if (confirm("هل أنت متأكد من تصفير عداد الكاريزما (تحت المايك)؟")) {
-          try {
-              const updatedSpeakers = room.speakers.map(s => {
-                  if (s.id === currentUser.id) {
-                      return { ...s, wealth: 0, charm: 0 };
-                  }
-                  return s;
-              });
-              await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
-              addToast("تم تصفير الكاريزما بنجاح", "success");
-              setShowMenuModal(false);
-          } catch(e) {
-              console.error(e);
-              addToast("حدث خطأ أثناء التصفير", "error");
-          }
-      }
-  };
-
-  const handleProfileAction = async (action: string, payload?: any) => {
-    if (!selectedUser) return;
-    if (action === 'gift') {
-       setGiftRecipientId(selectedUser.id);
-       setShowGiftModal(true);
-       setSelectedUser(null);
-    } else if (action === 'toggleFollow') {
-       addToast("تمت المتابعة", 'success');
-    } else if (action === 'toggleMute') {
-       const updatedSpeakers = room.speakers.map(s => {
-           if (s.id === selectedUser.id) return { ...s, isMuted: !s.isMuted };
-           return s;
-       });
-       await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
-    } else if (action === 'copyId') {
-       addToast("تم نسخ المعرف بنجاح", 'success');
-    } else if (action === 'editProfile') {
-       setSelectedUser(null); 
-       onEditProfile(); 
+      try {
+        const roomRef = doc(db, "rooms", room.id);
+        let updatedSpeakersList = room.speakers.filter(s => s.id !== currentUser.id);
+        updatedSpeakersList.push(newSpeakerObj);
+        await updateDoc(roomRef, { speakers: updatedSpeakersList });
+      } catch (e) { console.error(e); }
     }
   };
 
-  const handleSafeLeave = () => {
-      if (room.hostId === currentUser.id) {
-          if (confirm("⚠️ تحذير: بصفتك المضيف، الخروج سيؤدي إلى إغلاق الغرفة نهائياً.\n\nهل أنت متأكد من الخروج؟")) {
-              onLeave();
-          }
-      } else {
-          if (confirm("هل تريد مغادرة الغرفة؟")) {
-              onLeave();
-          }
-      }
+  const handleLeaveRoomWithCleanup = async () => {
+    const rId = room.id;
+    onLeave();
+    try {
+        const roomRef = doc(db, "rooms", rId);
+        const updatedSpeakers = room.speakers.filter(s => s.id !== currentUser.id);
+        await updateDoc(roomRef, { speakers: updatedSpeakers, listeners: increment(-1) });
+    } catch (e) { console.error(e); }
   };
 
-  const handleUpdateCoins = (newCoins: number) => {
-      updateDoc(doc(db, "users", currentUser.id), { coins: newCoins }).catch(console.error);
-  };
+  const filteredGifts = useMemo(() => gifts.filter(g => {
+    if (giftTab === 'lucky') return g.isLucky;
+    if (giftTab === 'exclusive') return g.cost >= 1000 && !g.isLucky;
+    return g.cost < 1000 && !g.isLucky;
+  }), [gifts, giftTab]);
+
+  const bgStyle = room.background.startsWith('url') 
+    ? { backgroundImage: room.background, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : { background: room.background };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col" style={{ background: room.background }}>
+    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col" style={bgStyle}>
       <Toast toasts={toasts} onRemove={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
+      <AnimatePresence>{luckyWinAmount > 0 && <WinStrip amount={luckyWinAmount} />}</AnimatePresence>
 
       <AnimatePresence>
-         {luckyWinAmount > 0 && (
-            <WinStrip amount={luckyWinAmount} />
+         {activeGiftEffect && (
+            <motion.div initial={{ scale: 0, opacity: 0, y: 100 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 1.5, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 20 }} className="fixed inset-0 z-[55] flex items-center justify-center pointer-events-none">
+               <div className="flex flex-col items-center relative">
+                  <div className="w-44 h-44 relative z-10 drop-shadow-[0_20px_40px_rgba(251,191,36,0.6)]">{renderGiftIcon(activeGiftEffect.icon)}</div>
+                  <h3 className="text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 to-yellow-600 drop-shadow-lg">{activeGiftEffect.name}</h3>
+               </div>
+            </motion.div>
          )}
       </AnimatePresence>
 
-      <div className="flex justify-between items-center p-4 pt-8 bg-gradient-to-b from-black/60 to-transparent">
+      <div className="flex justify-between items-center p-4 pt-12 bg-gradient-to-b from-black/60 to-transparent shrink-0">
          <div className="flex items-center gap-2">
-            <button 
-               onClick={handleSafeLeave}
-               className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-full hover:bg-red-500/20 hover:text-red-400 backdrop-blur-md transition-colors"
-            >
-               <X size={18} />
-            </button>
-            <button 
-               onClick={onMinimize} 
-               className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-full hover:bg-white/20 backdrop-blur-md transition-colors"
-            >
-               <ChevronDown size={20} />
-            </button>
-            <div className="text-white mr-1">
-               <h2 className="font-bold text-sm drop-shadow-md">{room.title}</h2>
-               <p className="text-[10px] text-white/80">ID: {room.id}</p>
-            </div>
+            <button onClick={handleLeaveRoomWithCleanup} className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-full hover:bg-red-500/20 border border-white/5"><X size={18} /></button>
+            <button onClick={onMinimize} className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-full"><ChevronDown size={20} /></button>
+            <div className="text-white"><h2 className="font-bold text-sm truncate max-w-[120px]">{room.title}</h2><p className="text-[9px] opacity-60">ID: {room.id}</p></div>
          </div>
-         <div className="bg-black/30 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-2 border border-white/10">
-            <div className="flex -space-x-2 space-x-reverse">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="w-5 h-5 rounded-full bg-slate-500 border border-slate-900"></div>
-              ))}
-            </div>
-            <span className="text-xs font-bold text-white">{room.listeners + 1}</span>
+         <div className="bg-black/30 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 flex items-center gap-2">
+            <span className="text-xs font-bold text-white">👥 {room.listeners}</span>
          </div>
       </div>
 
-      <AnimatePresence>
-        {entranceBanner && (
-          <motion.div 
-            initial={{ x: 100, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: -100, opacity: 0 }}
-            className="absolute top-24 left-0 right-0 z-20 pointer-events-none"
-          >
-            <div className="mx-4 bg-gradient-to-r from-amber-500/90 to-purple-600/90 backdrop-blur-md p-2 rounded-xl shadow-xl text-center text-white font-bold text-sm flex items-center justify-center gap-2 border border-white/20">
-               <Crown size={16} className="text-yellow-200" />
-               {entranceBanner}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="flex-1 px-4 overflow-y-auto mt-2">
-         <div className="grid grid-cols-4 gap-x-2 gap-y-12">
-            {seats.map((speaker, index) => (
-               <div key={index} className="flex flex-col items-center gap-1 relative">
-                  <button 
-                    onClick={() => handleSeatClick(index)}
-                    className="relative w-[58px] h-[58px] rounded-full flex items-center justify-center transition-all active:scale-95"
-                  >
+      <div className="flex-1 px-4 overflow-y-auto mt-6 scrollbar-hide">
+         <div className="grid grid-cols-4 gap-x-2 gap-y-10">
+            {localSeats.map((speaker, index) => (
+               <div key={index} className="flex flex-col items-center relative">
+                  <button onClick={() => handleSeatClick(index)} className="relative w-[60px] h-[60px] rounded-full flex items-center justify-center transition-transform active:scale-90">
                      {speaker ? (
                         <div className="relative w-full h-full flex items-center justify-center">
-                           <div className={`w-[86%] h-[86%] rounded-full overflow-hidden ${
-                             !speaker.frame ? (speaker.id === 'u1' ? 'p-[2px] bg-gradient-to-tr from-amber-400 to-yellow-200' : 'p-[2px] bg-gradient-to-tr from-blue-400 to-cyan-200') : ''
-                           }`}>
-                             <img 
-                                src={speaker.avatar} 
-                                alt={speaker.name} 
-                                className={`w-full h-full rounded-full object-cover ${speaker.isMuted ? 'grayscale' : ''}`}
-                             />
-                           </div>
-                           {speaker.frame && (
-                              <img 
-                                src={speaker.frame} 
-                                alt="Frame" 
-                                className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10 scale-[1.15]"
-                              />
-                           )}
-                           {speaker.isVip && !speaker.frame && (
-                              <div className="absolute -bottom-1 -right-1 bg-amber-500 rounded-full p-1 border-2 border-slate-900 z-10">
-                                 <Crown size={10} className="text-white" fill="white" />
-                              </div>
-                           )}
-                           {speaker.isMuted && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full z-20">
-                                 <MicOff size={16} className="text-white" />
-                              </div>
-                           )}
-                           <div className="absolute -bottom-5 w-full flex justify-center z-30">
-                             <span className={`text-[9px] bg-black/40 backdrop-blur-sm px-2 rounded-full truncate max-w-[120%] border border-white/5 ${speaker.nameStyle ? speaker.nameStyle : 'text-white'}`}>
-                               {speaker.name}
-                             </span>
-                           </div>
-                           
-                           {/* --- ACTIVATED CHARISMA BADGE --- */}
-                           <motion.div 
-                              key={speaker.charm}
-                              initial={{ scale: 0.8 }}
-                              animate={{ scale: 0.75 }}
-                              className="absolute -bottom-9 flex items-center justify-center gap-1 bg-black/70 px-2 py-0.5 rounded-full backdrop-blur-md border border-pink-500/40 shadow-lg z-20"
-                           >
-                              <Heart size={10} className="text-pink-500 animate-pulse" fill="currentColor" />
-                              <span className="text-[10px] text-white font-black font-mono">{(speaker.charm || 0).toLocaleString()}</span>
-                           </motion.div>
+                           <div className={`w-[84%] h-[84%] rounded-full overflow-hidden ${!speaker.frame ? 'p-[2px] bg-gradient-to-tr from-blue-400 to-cyan-200' : ''}`}><img src={speaker.avatar} className="w-full h-full rounded-full object-cover" /></div>
+                           {speaker.frame && <img src={speaker.frame} className="absolute inset-0 w-full h-full object-contain z-10 scale-[1.3]" />}
+                           <div className="absolute -bottom-5 w-full text-center"><span className="text-[9px] bg-black/40 backdrop-blur-sm px-2 rounded-full truncate max-w-[120%] border border-white/5 text-white">{speaker.name}</span></div>
+                           <div className="absolute -bottom-9 flex items-center gap-1 bg-black/70 px-2 py-0.5 rounded-full border border-pink-500/40"><span className="text-[9px] text-white font-bold">{(speaker.charm || 0).toLocaleString()}</span></div>
                         </div>
                      ) : (
-                        <div className="relative w-full h-full flex items-center justify-center rounded-full bg-slate-800/40 border-2 border-dashed border-slate-600 hover:border-amber-500/50 hover:bg-slate-800 transition-all">
-                           <Mic size={18} className="text-slate-500" />
-                           <div className="absolute bottom-2 text-[8px] text-slate-500 font-mono opacity-50">{index + 1}</div>
-                        </div>
+                        <div className="relative w-full h-full flex items-center justify-center rounded-full bg-slate-800/40 border-2 border-dashed border-slate-700 hover:border-slate-500 transition-colors"><Mic size={18} className="text-slate-600" /></div>
                      )}
                   </button>
                </div>
@@ -511,40 +301,19 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
          </div>
       </div>
 
-      <div className="h-[35%] bg-gradient-to-t from-slate-950 via-slate-900/95 to-transparent px-4 pb-4 pt-10 flex flex-col justify-end relative">
-         <div className="overflow-y-auto mb-4 space-y-2.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+      <div className="h-[38%] bg-gradient-to-t from-slate-950 via-slate-900/90 to-transparent px-4 pb-4 pt-10 flex flex-col justify-end relative shrink-0">
+         <div className="overflow-y-auto mb-4 space-y-2 pr-1 scrollbar-hide flex-1">
             {messages.map((msg) => (
-               <div key={msg.id} className={`flex flex-col items-start ${msg.type === 'system' ? 'items-center w-full my-2' : ''}`}>
-                  {msg.type === 'system' ? (
-                     <div className="bg-white/10 backdrop-blur-md border border-white/10 text-xs px-3 py-1 rounded-full text-amber-200">
-                        {msg.content}
-                     </div>
-                  ) : msg.type === 'gift' ? (
-                     <div className={`rounded-full p-1 pr-3 pl-1 flex items-center gap-2 self-start border ${
-                        msg.isLuckyWin ? 'bg-gradient-to-r from-green-900/90 to-emerald-800/90 border-green-500' : 'bg-gradient-to-r from-purple-900/80 to-pink-900/80 border-purple-500/30'
-                     }`}>
-                        <span className={`text-xs font-bold ${msg.userNameStyle ? msg.userNameStyle : 'text-amber-400'}`}>{msg.userName}:</span>
-                        <div className="flex flex-col items-start">
-                            <span className="text-xs text-white opacity-90">{msg.content.replace(`${msg.userName}:`, '')}</span>
-                            {msg.isLuckyWin && <span className="text-[9px] text-green-400 font-bold">ربح {msg.winAmount} كوينز! 🍀</span>}
-                        </div>
-                        <div className="bg-white/20 rounded-full w-6 h-6 flex items-center justify-center text-sm overflow-hidden relative">
-                           {msg.giftData?.icon.startsWith('http') ? <img src={msg.giftData.icon} className="w-full h-full object-cover" /> : msg.giftData?.icon}
-                        </div>
-                     </div>
-                  ) : (
+               <div key={msg.id} className="flex flex-col items-start">
+                  {msg.type === 'gift' ? (
+                     <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="rounded-xl p-1.5 pr-4 pl-2 flex items-center gap-2 bg-white/5 backdrop-blur-md border border-white/10 shadow-lg">
+                        <div className="w-8 h-8 rounded-full bg-black/30 p-1 flex items-center justify-center shrink-0">{renderGiftIcon(msg.giftData?.icon || '')}</div>
+                        <div className="flex flex-col"><div className="flex items-center gap-1.5"><span className={`text-[10px] font-black ${msg.userNameStyle || 'text-amber-400'}`}>{msg.userName}</span><span className="text-[9px] text-white/50">أرسل {msg.giftData?.name}</span></div><span className="text-[9px] text-white/80 font-bold">{msg.isLuckyWin && <span className="text-green-400">🍀 ربح {msg.winAmount?.toLocaleString()}</span>}</span></div>
+                     </motion.div>
+                   ) : (
                      <div className="flex items-start gap-2 max-w-[90%]">
-                        <div className={`mt-1 h-5 px-1.5 rounded flex items-center justify-center text-[9px] font-bold ${
-                           msg.userLevel === UserLevel.VIP ? 'bg-gradient-to-r from-amber-400 to-yellow-600 text-black' : 'bg-slate-700 text-slate-300'
-                        }`}>
-                           {msg.userLevel}
-                        </div>
-                        <div className="flex flex-col items-start">
-                           <span className={`text-[10px] font-medium px-1 mb-0.5 ${msg.userNameStyle ? msg.userNameStyle : 'text-slate-400'}`}>{msg.userName}</span>
-                           <div className="rounded-2xl rounded-tr-none px-3 py-2 text-sm text-white shadow-sm bg-white/10 backdrop-blur-sm border border-white/5" style={msg.bubbleUrl ? { backgroundImage: `url(${msg.bubbleUrl})`, backgroundSize: 'cover' } : {}}>
-                              {msg.content}
-                           </div>
-                        </div>
+                        <div className="mt-1 px-1.5 rounded bg-slate-700 text-slate-300 text-[8px] font-bold h-4 flex items-center">Lv.{msg.userLevel}</div>
+                        <div className="flex flex-col"><span className={`text-[9px] mb-0.5 ${msg.userNameStyle || 'text-slate-400'}`}>{msg.userName}</span><div className="rounded-2xl rounded-tr-none px-3 py-1.5 text-xs text-white bg-white/10 backdrop-blur-sm border border-white/5" style={msg.bubbleUrl ? { backgroundImage: `url(${msg.bubbleUrl})`, backgroundSize: 'cover' } : {}}>{msg.content}</div></div>
                      </div>
                   )}
                </div>
@@ -552,142 +321,97 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
             <div ref={messagesEndRef} />
          </div>
 
-         <div className="flex items-center gap-2">
-            <button 
-               onClick={() => {
-                   if (room.speakers.some(s => s.id === currentUser.id)) onToggleMute();
-                   else addToast("اضغط على مقعد فارغ للصعود", "info");
-               }}
-               className={`w-12 h-12 rounded-full flex items-center justify-center shadow-2xl transition-all border-2 ${
-                  isMuted ? 'bg-slate-800 text-slate-400 border-slate-600' : 'bg-gradient-to-br from-green-500 to-emerald-600 text-white border-green-400 shadow-green-500/50'
-               }`}
-            >
-               {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
-            </button>
-            
-            <div className="flex-1 bg-slate-800/80 backdrop-blur rounded-full h-10 flex items-center px-4 border border-slate-700">
-               <input 
+         <div className="flex items-center gap-2 mt-2">
+            <div className="flex-1 bg-slate-800/40 backdrop-blur-xl rounded-full h-11 flex items-center px-4 border border-white/10 shadow-inner group">
+                <input 
                   type="text" 
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="قل شيئاً..."
-                  className="bg-transparent text-white w-full outline-none text-xs"
-               />
-               <button onClick={handleSendMessage} className="ml-2 text-blue-400"><Send size={16} /></button>
+                  value={inputValue} 
+                  onChange={(e) => setInputValue(e.target.value)} 
+                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()} 
+                  placeholder="اكتب رسالة..." 
+                  className="bg-transparent text-white w-full outline-none text-xs text-right placeholder-white/30" 
+                />
+                <button onClick={handleSendMessage} className="ml-2 text-blue-400 hover:text-blue-300 transition-colors"><Send size={16} /></button>
             </div>
 
-             <button onClick={() => setShowMenuModal(true)} className="w-10 h-10 bg-slate-800 rounded-full text-white border border-slate-700 shadow-lg flex items-center justify-center">
-               <LayoutGrid size={18} />
-            </button>
+            <div className="flex items-center gap-1.5 relative shrink-0">
+                <AnimatePresence>
+                    {comboState.active && (
+                       <motion.div 
+                         initial={{ scale: 0, y: 20, opacity: 0 }} 
+                         animate={{ scale: 1, y: 0, opacity: 1 }} 
+                         exit={{ scale: 0, opacity: 0 }}
+                         className="absolute -top-16 left-6 flex flex-col items-center justify-center z-[70]"
+                       >
+                           <button 
+                             onClick={handleComboClick}
+                             className={`relative w-14 h-14 rounded-full flex items-center justify-center transition-all border-2 active:scale-95 shadow-2xl overflow-hidden ${isComboPulsing ? 'scale-110 brightness-125' : ''}`}
+                             style={{
+                                background: 'rgba(139, 92, 246, 0.35)',
+                                backdropFilter: 'blur(15px)',
+                                borderColor: 'rgba(167, 139, 250, 0.8)',
+                                boxShadow: '0 8px 30px rgba(139, 92, 246, 0.5)'
+                             }}
+                           >
+                              <AnimatePresence>
+                                {isComboPulsing && (
+                                    <motion.div initial={{ scale: 0.5, opacity: 1 }} animate={{ scale: 2.2, opacity: 0 }} className="absolute inset-0 rounded-full border-2 border-purple-300" />
+                                )}
+                              </AnimatePresence>
+                              <div className="w-8 h-8 flex items-center justify-center z-10 drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]">
+                                 {comboState.gift && renderGiftIcon(comboState.gift.icon)}
+                              </div>
+                              <svg className="absolute inset-0 w-full h-full -rotate-90">
+                                 <circle cx="28" cy="28" r="25" stroke="rgba(255,255,255,0.1)" strokeWidth="4" fill="transparent" />
+                                 <motion.circle 
+                                    cx="28" cy="28" r="25" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-purple-400" 
+                                    initial={{ strokeDasharray: "157 157", strokeDashoffset: 157 }}
+                                    animate={{ strokeDashoffset: 0 }}
+                                    transition={{ duration: comboState.timer, ease: "linear" }}
+                                    key={comboState.timer}
+                                 />
+                              </svg>
+                              <div className="absolute bottom-1 inset-x-0 flex justify-center"><span className="text-[9px] font-black text-white">{Math.ceil(comboState.timer)}s</span></div>
+                           </button>
+                           <motion.div key={comboState.count} initial={{ scale: 1.8, y: -5 }} animate={{ scale: 1, y: 0 }} className="absolute -top-3 -right-2 bg-gradient-to-b from-yellow-300 via-amber-500 to-orange-600 text-black text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-[#10141f] z-20 shadow-xl">X{comboState.count}</motion.div>
+                       </motion.div>
+                    )}
+                </AnimatePresence>
 
-            <button onClick={() => { setGiftRecipientId(null); setSelectedGiftQuantity(1); setShowGiftModal(true); }} className="w-10 h-10 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full text-white shadow-lg flex items-center justify-center">
-               <GiftIcon size={18} />
-            </button>
+                <div className="flex items-center gap-1.5">
+                   <button onClick={() => localSeats.some(s => s?.id === currentUser.id) ? onToggleMute() : addToast("اصعد على المايك أولاً", "info")} className={`w-10 h-10 rounded-full flex items-center justify-center border-2 shrink-0 transition-all ${isMuted ? 'bg-slate-800 text-slate-500 border-slate-700' : 'bg-blue-600 text-white border-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.4)]'}`}>{isMuted ? <MicOff size={20} /> : <Mic size={20} />}</button>
+                   <button onClick={() => setShowGiftModal(true)} className="w-10 h-10 bg-gradient-to-br from-pink-500 via-purple-600 to-indigo-700 rounded-full text-white shadow-xl flex items-center justify-center shrink-0 border border-white/20 hover:brightness-110 active:scale-95 transition-all"><GiftIcon size={18} /></button>
+                   <button onClick={() => setShowMenuModal(true)} className="w-10 h-10 bg-slate-800/80 backdrop-blur rounded-full text-white border border-white/10 flex items-center justify-center shrink-0 hover:bg-slate-700 transition-all"><LayoutGrid size={18} /></button>
+                </div>
+            </div>
          </div>
       </div>
 
       <AnimatePresence>
-         {comboState.active && (
-            <motion.button
-               initial={{ scale: 0, opacity: 0 }}
-               animate={{ scale: 1, opacity: 1 }}
-               exit={{ scale: 0, opacity: 0 }}
-               onClick={handleComboClick}
-               className="absolute bottom-28 left-4 z-50 flex flex-col items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 shadow-[0_0_20px_rgba(236,72,153,0.6)] border-4 border-white/20 active:scale-95 cursor-pointer"
-            >
-               <svg className="absolute inset-0 w-full h-full -rotate-90">
-                  <circle cx="40" cy="40" r="36" className="stroke-white/20 fill-none stroke-[4]" />
-                  <circle cx="40" cy="40" r="36" className="stroke-yellow-400 fill-none stroke-[4] transition-all duration-100 ease-linear" strokeDasharray="226" strokeDashoffset={226 - (226 * comboState.timer / 3)} />
-               </svg>
-               <div className="relative z-10 flex flex-col items-center justify-center -mt-1">
-                  <div className="w-8 h-8 flex items-center justify-center mb-0.5">
-                      {comboState.gift.icon.startsWith('http') ? <img src={comboState.gift.icon} className="w-full h-full object-contain" alt="gift" /> : <span className="text-2xl leading-none">{comboState.gift.icon}</span>}
-                  </div>
-                  <div className="flex items-center justify-center leading-none">
-                     <span className="text-xl font-black text-white italic">x{comboState.quantity}</span>
-                  </div>
-               </div>
-            </motion.button>
-         )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-         {showMenuModal && (
-             <div className="fixed inset-0 z-[60] flex items-end justify-center pointer-events-none">
-                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowMenuModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto" />
-                 <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} className="relative w-full max-w-md bg-[#10141f] rounded-t-[30px] p-6 pb-8 border-t border-white/10 pointer-events-auto" >
-                    <div className="grid grid-cols-2 gap-4">
-                        <button onClick={() => { setShowMenuModal(false); setShowGameCenter(true); }} className="bg-slate-800 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 active:scale-95 transition-all" >
-                            <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center text-green-400"><Gamepad2 size={24} /></div>
-                            <span className="font-bold text-sm text-white">مركز الألعاب</span>
-                        </button>
-                        <button onClick={() => { setShowMenuModal(false); setShowRoomSettingsModal(true); }} className="bg-slate-800 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 active:scale-95 transition-all" >
-                            <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400"><Settings size={24} /></div>
-                            <span className="font-bold text-sm text-white">إعدادات الغرفة</span>
-                        </button>
-                        {room.speakers.some(s => s.id === currentUser.id) && (
-                           <button onClick={handleResetCounters} className="bg-slate-800 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 active:scale-95 transition-all col-span-2" >
-                              <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-400"><RotateCcw size={24} /></div>
-                              <span className="font-bold text-sm text-white">تصفير العداد (الكاريزما)</span>
-                           </button>
-                        )}
-                    </div>
-                 </motion.div>
-             </div>
-         )}
-      </AnimatePresence>
-
-      {/* Actual Modals */}
-      <GameCenterModal 
-        isOpen={showGameCenter} 
-        onClose={() => setShowGameCenter(false)} 
-        onSelectGame={(game) => { setActiveGame(game); setShowGameCenter(false); }} 
-      />
-      
-      <WheelGameModal 
-        isOpen={activeGame === 'wheel'} 
-        onClose={() => setActiveGame(null)} 
-        userCoins={currentUser.coins} 
-        onUpdateCoins={handleUpdateCoins} 
-        winRate={gameSettings.wheelWinRate} 
-      />
-
-      <SlotsGameModal 
-        isOpen={activeGame === 'slots'} 
-        onClose={() => setActiveGame(null)} 
-        userCoins={currentUser.coins} 
-        onUpdateCoins={handleUpdateCoins} 
-        winRate={gameSettings.slotsWinRate} 
-      />
-
-      <RoomSettingsModal 
-        isOpen={showRoomSettingsModal} 
-        onClose={() => setShowRoomSettingsModal(false)} 
-        room={room} 
-        onUpdate={onUpdateRoom} 
-      />
-
-      <AnimatePresence>
          {showGiftModal && (
-            <div className="absolute inset-0 z-[60] flex items-end bg-black/50 backdrop-blur-sm" onClick={() => setShowGiftModal(false)}>
-               <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} className="w-full bg-[#10141f] rounded-t-[30px] p-6 pb-8 border-t border-white/10" onClick={e => e.stopPropagation()}>
-                  <div className="flex justify-between items-center mb-4">
-                     <h3 className="text-white font-bold text-lg">إرسال هدية</h3>
-                     <div className="bg-black/40 px-3 py-1.5 rounded-full flex items-center gap-2 border border-white/10">
-                        <span className="text-yellow-400 font-bold text-sm">🪙 {currentUser.coins.toLocaleString()}</span>
-                     </div>
+            <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 backdrop-blur-[2px]" onClick={() => setShowGiftModal(false)}>
+               <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} className="w-full max-w-sm bg-slate-900/40 backdrop-blur-[45px] rounded-t-[45px] border-t border-white/25 flex flex-col max-h-[60vh] overflow-hidden shadow-[0_-25px_60px_rgba(0,0,0,0.6)]" onClick={e => e.stopPropagation()}>
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-1.5 bg-white/25 rounded-full mt-2.5"></div>
+                  <div className="p-6 flex items-center justify-between bg-white/5 border-b border-white/10 mt-3">
+                    <div className="flex gap-6">
+                      {[{ id: 'popular', label: 'شائع' }, { id: 'exclusive', label: 'مميز' }, { id: 'lucky', label: 'الحظ' }].map(tab => (
+                        <button key={tab.id} onClick={() => setGiftTab(tab.id as any)} className={`text-sm font-black transition-all relative ${giftTab === tab.id ? 'text-amber-400 scale-105' : 'text-white/35 hover:text-white/60'}`}>{tab.label}{giftTab === tab.id && <motion.div layoutId="tab-indicator" className="absolute -bottom-2.5 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full shadow-[0_0_15px_rgba(251,191,36,0.9)]" />}</button>
+                      ))}
+                    </div>
+                    <div className="bg-slate-950/60 px-4 py-2 rounded-full text-yellow-400 text-xs font-black border border-white/15 shadow-inner flex items-center gap-1.5"><span className="text-yellow-500">🪙</span> {currentUser.coins.toLocaleString()}</div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3 max-h-[35vh] overflow-y-auto mb-4">
-                     {gifts.map(gift => (
-                        <button key={gift.id} onClick={() => handleSendGift(gift, selectedGiftQuantity)} className="flex flex-col items-center p-3 rounded-2xl bg-slate-800/50 hover:bg-slate-700 border border-transparent hover:border-amber-500/50 transition-all">
-                           <div className="w-12 h-12 mb-2 flex items-center justify-center">
-                              {gift.icon.startsWith('http') ? <img src={gift.icon} className="w-full h-full object-contain" alt={gift.name} /> : <span className="text-4xl">{gift.icon}</span>}
-                           </div>
-                           <span className="text-white text-xs font-medium">{gift.name}</span>
-                           <span className="text-yellow-400 text-[10px] mt-1 bg-black/30 px-2 py-0.5 rounded-full">{gift.cost}</span>
-                        </button>
-                     ))}
+                  <div className="grid grid-cols-4 gap-3 p-6 overflow-y-auto min-h-[32vh] bg-transparent scrollbar-hide">
+                    {filteredGifts.map(gift => (
+                      <button key={gift.id} onClick={() => { setLastSelectedGift(gift); handleSendGift(gift, selectedGiftQuantity); }} className={`group flex flex-col items-center p-2.5 rounded-[22px] transition-all border ${lastSelectedGift?.id === gift.id ? 'border-amber-400 bg-amber-400/20 shadow-[0_0_20px_rgba(251,191,36,0.25)]' : 'border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/25'}`}>
+                        <div className="w-14 h-14 mb-1.5 flex items-center justify-center text-3xl transition-transform group-hover:scale-115 group-active:scale-95 drop-shadow-[0_4px_10px_rgba(0,0,0,0.3)]">{renderGiftIcon(gift.icon)}</div>
+                        <span className="text-white text-[10px] font-black truncate w-full text-center">{gift.name}</span>
+                        <div className="flex items-center gap-0.5 mt-1 opacity-90"><span className="text-yellow-400 text-[10px] font-black">{gift.cost}</span><span className="text-[9px]">🪙</span></div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="p-6 bg-black/30 border-t border-white/15 flex items-center justify-between gap-5">
+                    <div className="flex gap-2 overflow-x-auto scrollbar-hide flex-1">{GIFT_MULTIPLIERS.map(qty => (<button key={qty} onClick={() => setSelectedGiftQuantity(qty)} className={`px-3.5 py-2 rounded-2xl text-[10px] font-black transition-all ${selectedGiftQuantity === qty ? 'bg-amber-400 text-black shadow-lg shadow-amber-900/50 scale-110' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}>x{qty}</button>))}</div>
+                    <button onClick={() => lastSelectedGift && handleSendGift(lastSelectedGift, selectedGiftQuantity)} className="px-10 py-3.5 bg-gradient-to-br from-amber-400 via-orange-500 to-amber-600 bg-[length:200%_auto] hover:bg-right transition-all rounded-2xl text-black font-black text-sm shadow-2xl shadow-orange-950/50 active:scale-95 flex items-center gap-2">إرسال <Zap size={16} fill="black" /></button>
                   </div>
                </motion.div>
             </div>
@@ -695,15 +419,30 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
       </AnimatePresence>
 
       <AnimatePresence>
-         {selectedUser && (
-            <UserProfileSheet 
-               user={selectedUser} 
-               isCurrentUser={selectedUser.id === currentUser.id}
-               onClose={() => setSelectedUser(null)}
-               onAction={handleProfileAction}
-            />
+         {showMenuModal && (
+             <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowMenuModal(false)}>
+                <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} className="relative w-full max-w-md bg-[#10141f] rounded-t-[30px] p-6 border-t border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button onClick={() => { setShowMenuModal(false); setShowGameCenter(true); }} className="bg-slate-800 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 hover:bg-slate-700 transition-colors"><div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center text-green-400"><Gamepad2 size={24} /></div><span className="font-bold text-sm text-white">الألعاب</span></button>
+                    
+                    {/* OWNER ONLY: ROOM SETTINGS */}
+                    {isOwner && (
+                      <button onClick={() => { setShowMenuModal(false); setShowSettingsModal(true); }} className="bg-slate-800 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 hover:bg-slate-700 transition-colors"><div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400"><Settings size={24} /></div><span className="font-bold text-sm text-white">إعدادات الروم</span></button>
+                    )}
+
+                    {isAdmin && (<button onClick={() => { if(confirm("تصفير؟")) room.speakers.forEach(s => updateDoc(doc(db, "users", s.id), { charm: 0 })); }} className="bg-slate-800 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 hover:bg-slate-700 transition-colors"><div className="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center text-orange-400"><RotateCcw size={24} /></div><span className="font-bold text-sm text-white">تصفير</span></button>)}
+                    <button onClick={handleLeaveRoomWithCleanup} className="bg-red-500/10 p-4 rounded-2xl flex flex-col items-center gap-2 border border-red-500/20 hover:bg-red-500/20 transition-colors"><div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center text-red-500"><LogOut size={24} /></div><span className="font-bold text-sm text-red-400">مغادرة</span></button>
+                  </div>
+                </motion.div>
+             </div>
          )}
       </AnimatePresence>
+
+      <GameCenterModal isOpen={showGameCenter} onClose={() => setShowGameCenter(false)} onSelectGame={(game) => { setActiveGame(game); setShowGameCenter(false); }} />
+      <RoomSettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} room={room} onUpdate={onUpdateRoom} />
+      <WheelGameModal isOpen={activeGame === 'wheel'} onClose={() => setActiveGame(null)} userCoins={currentUser.coins} onUpdateCoins={(c) => updateDoc(doc(db, "users", currentUser.id), { coins: c })} winRate={gameSettings.wheelWinRate} />
+      <SlotsGameModal isOpen={activeGame === 'slots'} onClose={() => setActiveGame(null)} userCoins={currentUser.coins} onUpdateCoins={(c) => updateDoc(doc(db, "users", currentUser.id), { coins: c })} winRate={gameSettings.slotsWinRate} />
+      <AnimatePresence>{selectedUser && <UserProfileSheet user={selectedUser} isCurrentUser={selectedUser.id === currentUser.id} onClose={() => setSelectedUser(null)} onAction={() => {}} />}</AnimatePresence>
     </div>
   );
 };
