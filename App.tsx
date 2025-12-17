@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Home, User as UserIcon, Plus, Bell, Crown, Gem, Settings, ChevronRight, Edit3, Share2, LogOut, Shield, Database, ShoppingBag, Camera, Trophy, Flame, Sparkles } from 'lucide-react';
+import { Home, User as UserIcon, Plus, Bell, Crown, Gem, Settings, ChevronRight, Edit3, Share2, LogOut, Shield, Database, ShoppingBag, Camera, Trophy, Flame, Sparkles, UserX } from 'lucide-react';
 import RoomCard from './components/RoomCard';
 import VoiceRoom from './components/VoiceRoom';
 import AuthScreen from './components/AuthScreen';
@@ -15,8 +15,8 @@ import { MOCK_ROOMS, VIP_LEVELS, GIFTS as INITIAL_GIFTS, STORE_ITEMS, MOCK_CONTR
 import { Room, User, VIPPackage, UserLevel, Gift, StoreItem, GameSettings } from './types';
 import { AnimatePresence } from 'framer-motion';
 import { db, auth } from './services/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, setDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { collection, onSnapshot, addDoc, updateDoc, doc, setDoc, getDoc, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signOut, deleteUser } from 'firebase/auth';
 
 // --- CONFIGURATION ---
 // تم تحديث بريد المدير الجديد
@@ -207,6 +207,37 @@ export default function App() {
           setCurrentRoom(null);
           addToast("تم تسجيل الخروج", 'success');
       }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!currentUserAuth || !user) return;
+
+    if (!confirm("⚠️ تحذير خطير!\nهل أنت متأكد تماماً أنك تريد حذف حسابك؟\nهذا الإجراء لا يمكن التراجع عنه وسيتم فقدان جميع الكوينز والمستوى.")) {
+       return;
+    }
+
+    if (!confirm("تأكيد نهائي: هل أنت موافق على حذف حسابك نهائياً؟")) {
+       return;
+    }
+
+    try {
+       // 1. Delete Firestore Data
+       await deleteDoc(doc(db, "users", user.id));
+
+       // 2. Delete Auth Account
+       await deleteUser(currentUserAuth);
+
+       setUser(null);
+       setCurrentRoom(null);
+       addToast("تم حذف الحساب بنجاح. وداعاً!", 'success');
+    } catch (error: any) {
+       console.error("Delete Account Error: ", error);
+       if (error.code === 'auth/requires-recent-login') {
+          alert("لأغراض أمنية، يرجى تسجيل الخروج ثم تسجيل الدخول مرة أخرى لإتمام عملية حذف الحساب.");
+       } else {
+          addToast("حدث خطأ أثناء حذف الحساب", 'error');
+       }
+    }
   };
 
   const handleRoomJoin = async (room: Room) => {
@@ -576,7 +607,7 @@ export default function App() {
                       <img src={user.cover} className="w-full h-full object-cover animate-fade-in" alt="Cover" />
                    ) : (
                       <div className="w-full h-full bg-gradient-to-r from-indigo-900 via-purple-900 to-slate-900 relative">
-                         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+                         <div className="absolute inset-0 bg-black opacity-10"></div>
                       </div>
                    )}
                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
@@ -692,10 +723,18 @@ export default function App() {
                             </div>
                          </div>
                       ))}
-                      <div onClick={handleLogout} className="flex items-center justify-between p-4 hover:bg-red-900/10 cursor-pointer transition-colors group">
+                      
+                      <div onClick={handleLogout} className="flex items-center justify-between p-4 border-b border-white/5 hover:bg-red-900/10 cursor-pointer transition-colors group">
                             <div className="flex items-center gap-3">
                                 <LogOut size={18} className="text-red-500" />
                                <span className="text-sm font-medium text-red-500">تسجيل الخروج</span>
+                            </div>
+                      </div>
+
+                      <div onClick={handleDeleteAccount} className="flex items-center justify-between p-4 hover:bg-red-900/20 cursor-pointer transition-colors group">
+                            <div className="flex items-center gap-3">
+                                <UserX size={18} className="text-red-700" />
+                               <span className="text-sm font-bold text-red-700">حذف الحساب نهائياً</span>
                             </div>
                       </div>
                    </div>

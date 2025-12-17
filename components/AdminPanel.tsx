@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Users, Radio, Settings, X, Search, 
   MoreVertical, Ban, Trash2, ShieldAlert, CheckCircle, 
-  Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles, Clover, Shield, Mic
+  Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles, Clover, Shield, Mic, RotateCcw, UserX
 } from 'lucide-react';
 import { Room, User, UserLevel, VIPPackage, Gift, StoreItem, GameSettings, ItemType } from '../types';
 import { db } from '../services/firebase';
@@ -93,12 +93,62 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
          return;
      }
 
+     const action = currentStatus === 'active' || !currentStatus ? 'حظر (Ban)' : 'فك الحظر (Unban)';
+     if (!confirm(`هل أنت متأكد من ${action} لهذا المستخدم؟\nسيتم منع المستخدم من الدخول إذا تم حظره.`)) {
+         return;
+     }
+
      try {
         await updateDoc(doc(db, "users", userId), {
            status: currentStatus === 'active' || !currentStatus ? 'banned' : 'active'
         });
-        alert(`تم تغيير حالة المستخدم ${targetUser?.name || ''}`);
+        alert(`تم ${action} المستخدم بنجاح`);
      } catch(e) { alert("حدث خطأ"); }
+  };
+
+  const handleDeleteUserAccount = async (targetUser: User) => {
+      // Prevent deleting self
+      if (targetUser.id === currentUser.id) {
+          alert("لا يمكنك حذف حسابك من لوحة التحكم.");
+          return;
+      }
+      
+      // Prevent deleting other admins
+      if (targetUser.isAdmin) {
+          alert("❌ خطأ: لا يمكن حذف حساب مسؤول آخر.");
+          return;
+      }
+
+      if (confirm(`⚠️ تحذير نهائي!\nهل أنت متأكد من حذف حساب المستخدم: "${targetUser.name}" نهائياً؟\n\n- سيتم حذف جميع بياناته (الكوينز، المستوى، ID).\n- لا يمكن التراجع عن هذا الإجراء.`)) {
+          // Double Confirm
+          if(confirm("تأكيد أخير: هل أنت متأكد؟")) {
+            try {
+                await deleteDoc(doc(db, "users", targetUser.id));
+                alert("تم حذف حساب المستخدم وبياناته بنجاح.");
+            } catch(e) {
+                console.error(e);
+                alert("حدث خطأ أثناء الحذف.");
+            }
+          }
+      }
+  };
+
+  const handleZeroCoins = async (targetUser: User) => {
+      // Admin Check
+      if (targetUser.isAdmin && targetUser.id !== currentUser.id) {
+          alert("لا يمكن تصفير كوينز مشرف آخر.");
+          return;
+      }
+
+      if (confirm(`⚠️ تحذير!\nهل أنت متأكد من تصفير جميع الكوينزات للمستخدم: ${targetUser.name}؟\nالرصيد الحالي: ${targetUser.coins}\n\nسيصبح الرصيد 0. لا يمكن التراجع عن هذا الإجراء.`)) {
+          try {
+              await updateDoc(doc(db, "users", targetUser.id), { coins: 0 });
+              alert("تم تصفير الكوينز بنجاح.");
+          } catch(e) {
+              console.error(e);
+              alert("فشل تصفير الكوينز.");
+          }
+      }
   };
 
   // Charge Logic
@@ -321,7 +371,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
             <div>
                <h1 className="font-bold text-lg leading-none">لوحة القيادة</h1>
-               <span className="text-[10px] text-slate-400">Admin Control Panel v2.4</span>
+               <span className="text-[10px] text-slate-400">Admin Control Panel v2.5</span>
             </div>
          </div>
          <button onClick={onClose} className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition">
@@ -951,7 +1001,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                        ) : (
                                            <button 
                                               onClick={() => handleBanUser(u.id, u.status as string)} 
-                                              className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20"
+                                              className={`p-1.5 rounded hover:opacity-80 ${u.status === 'active' ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}
                                               title={u.status === 'active' ? 'حظر المستخدم' : 'فك الحظر'}
                                            >
                                               <Ban size={14} />
@@ -961,9 +1011,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                        <button 
                                           onClick={() => openChargeModal(u)} 
                                           className="p-1.5 bg-yellow-500/10 text-yellow-400 rounded hover:bg-yellow-500/20 flex items-center gap-1 font-bold"
+                                          title="شحن رصيد"
                                        >
                                           <Coins size={14} />
                                        </button>
+
+                                       {/* Reset Coins Button */}
+                                       <button 
+                                          onClick={() => handleZeroCoins(u)}
+                                          className="p-1.5 bg-orange-500/10 text-orange-400 rounded hover:bg-orange-500/20 flex items-center gap-1 font-bold"
+                                          title="تصفير الكوينز (Reset Coins)"
+                                       >
+                                          <RotateCcw size={14} />
+                                       </button>
+
                                        <button 
                                           onClick={() => openIdChangeModal(u)} 
                                           className="p-1.5 bg-purple-500/10 text-purple-400 rounded hover:bg-purple-500/20 flex items-center gap-1 font-bold"
@@ -971,6 +1032,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                        >
                                           <Hash size={14} />
                                        </button>
+
+                                       {/* Delete Account Button */}
+                                       {!u.isAdmin && (
+                                          <button 
+                                             onClick={() => handleDeleteUserAccount(u)}
+                                             className="p-1.5 bg-red-900/20 text-red-500 rounded hover:bg-red-900/40 flex items-center gap-1 font-bold border border-red-500/20"
+                                             title="حذف الحساب نهائياً"
+                                          >
+                                             <UserX size={14} />
+                                          </button>
+                                       )}
                                     </div>
                                  </td>
                               </tr>
