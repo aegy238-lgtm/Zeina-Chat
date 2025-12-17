@@ -1,21 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Room, User, ChatMessage, Gift, UserLevel } from '../types';
+import { Room, User, ChatMessage, Gift, UserLevel, GameSettings } from '../types';
 import { CURRENT_USER } from '../constants';
-import { Mic, MicOff, Gift as GiftIcon, X, Send, Heart, Crown, Shield, Lock, Check } from 'lucide-react';
+import { Mic, MicOff, Gift as GiftIcon, X, Send, Heart, Crown, Shield, Lock, Check, LayoutGrid, Gamepad2, Settings, ChevronDown } from 'lucide-react';
 import { generateSimulatedChat, generateSystemAnnouncement } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
 import UserProfileSheet from './UserProfileSheet';
 import Toast, { ToastMessage } from './Toast';
+import FruitGameModal from './FruitGameModal';
+import RoomSettingsModal from './RoomSettingsModal';
 
 interface VoiceRoomProps {
   room: Room;
   onLeave: () => void;
+  onMinimize: () => void;
   currentUser: User;
+  onUpdateUser: (user: User) => void;
   gifts: Gift[];
   onEditProfile: () => void;
+  gameSettings: GameSettings;
+  onUpdateRoom: (roomId: string, data: Partial<Room>) => void;
+  isMuted: boolean;
+  onToggleMute: () => void;
 }
 
-const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts, onEditProfile }) => {
+const VoiceRoom: React.FC<VoiceRoomProps> = ({ 
+  room, onLeave, onMinimize, currentUser, onUpdateUser, gifts, onEditProfile, gameSettings, onUpdateRoom, isMuted, onToggleMute 
+}) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   // Initialize 8 fixed seats. Fill starting ones with room.speakers
@@ -27,8 +37,11 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
     return initialSeats;
   });
   
-  const [isMuted, setIsMuted] = useState(true);
   const [showGiftModal, setShowGiftModal] = useState(false);
+  const [showMenuModal, setShowMenuModal] = useState(false); // New Menu State
+  const [showGameModal, setShowGameModal] = useState(false); // Game Modal State
+  const [showRoomSettingsModal, setShowRoomSettingsModal] = useState(false); // Room Settings State
+
   const [activeGiftEffect, setActiveGiftEffect] = useState<Gift | null>(null);
   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null); // null means 'All'
   
@@ -42,6 +55,14 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
   useEffect(() => {
      setSeats(prev => prev.map(s => s?.id === currentUser.id ? currentUser : s));
   }, [currentUser]);
+
+  // Update mute state in seats visually when isMuted prop changes
+  useEffect(() => {
+     const mySeatIdx = seats.findIndex(s => s?.id === currentUser.id);
+     if (mySeatIdx !== -1) {
+        setSeats(prev => prev.map((s, i) => i === mySeatIdx ? { ...s!, isMuted: isMuted } : s));
+     }
+  }, [isMuted]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -150,15 +171,18 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
       const newSeats = [...seats];
       
       if (myCurrentSeatIndex !== -1) {
-        // Move seat
+        // Move seat - SILENT
         newSeats[myCurrentSeatIndex] = null;
         newSeats[index] = currentUser;
-        addToast("تم تغيير المقعد", 'success');
       } else {
-        // Take seat
+        // Take seat - SILENT
         newSeats[index] = currentUser;
-        addToast("لقد صعدت إلى المايك", 'success');
-        setIsMuted(true);
+        // Check if we should auto-mute or respect global mute
+        if (isMuted) {
+           // already muted
+        } else {
+           // Not muted, so user goes on mic live
+        }
       }
       setSeats(newSeats);
     }
@@ -188,7 +212,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
           if (u?.id === selectedUser.id) {
              const newState = !u.isMuted;
              setSelectedUser({...u, isMuted: newState});
-             addToast(newState ? `تم كتم ${u.name}` : `تم إلغاء كتم ${u.name}`, newState ? 'error' : 'success');
              return { ...u, isMuted: newState };
           }
           return u;
@@ -196,7 +219,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
     } else if (action === 'copyId') {
        addToast("تم نسخ المعرف بنجاح", 'success');
     } else if (action === 'message') {
-       addToast(`تم فتح المحادثة الخاصة مع ${selectedUser.name}`, 'info');
        setSelectedUser(null);
     } else if (action === 'editProfile') {
        setSelectedUser(null); // Close profile sheet first
@@ -204,7 +226,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
     } else if (action === 'support') {
        addToast("تم إرسال الدعم", 'success');
     } else if (action === 'more') {
-       addToast("لا توجد خيارات إضافية حالياً", 'info');
+       // addToast("لا توجد خيارات إضافية حالياً", 'info');
     }
   };
 
@@ -215,12 +237,23 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
       {/* Header */}
       <div className="flex justify-between items-center p-4 pt-8 bg-gradient-to-b from-black/60 to-transparent">
          <div className="flex items-center gap-2">
-            <button onClick={onLeave} className="p-2 bg-white/10 rounded-full hover:bg-white/20 backdrop-blur-md">
-               <X className="text-white" size={20} />
+            <button 
+               onClick={onLeave} 
+               className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-full hover:bg-red-500/20 hover:text-red-400 backdrop-blur-md transition-colors"
+               title="خروج نهائي"
+            >
+               <X size={18} />
             </button>
-            <div className="text-white">
+            <button 
+               onClick={onMinimize} 
+               className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-full hover:bg-white/20 backdrop-blur-md transition-colors"
+               title="تصغير الغرفة"
+            >
+               <ChevronDown size={20} />
+            </button>
+            <div className="text-white mr-1">
                <h2 className="font-bold text-sm drop-shadow-md">{room.title}</h2>
-               <p className="text-[10px] text-white/80">ID: {room.id} | <span className="text-green-400">مفتوحة</span></p>
+               <p className="text-[10px] text-white/80">ID: {room.id}</p>
             </div>
          </div>
          <div className="bg-black/30 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-2 border border-white/10">
@@ -250,7 +283,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
         )}
       </AnimatePresence>
 
-      {/* Gift Effect Overlay (Shows for ALL gifts now) */}
+      {/* Gift Effect Overlay */}
       <AnimatePresence>
         {activeGiftEffect && (
            <motion.div 
@@ -260,12 +293,9 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
              className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
            >
               <div className="relative flex flex-col items-center justify-center">
-                 {/* Background Effect for Full Screen */}
                  {activeGiftEffect.animationType === 'full-screen' && (
                     <div className="absolute inset-[-500px] bg-gradient-to-r from-purple-500/20 to-amber-500/20 blur-3xl rounded-full animate-pulse"></div>
                  )}
-                 
-                 {/* Icon - Removed animate-bounce and increased sizes */}
                  {activeGiftEffect.icon.startsWith('http') || activeGiftEffect.icon.startsWith('data:') ? (
                     <img 
                        src={activeGiftEffect.icon} 
@@ -275,7 +305,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                  ) : (
                     <div className={`${activeGiftEffect.animationType === 'full-screen' ? 'text-9xl' : 'text-[10rem]'}`}>{activeGiftEffect.icon}</div>
                  )}
-                 
                  <h1 className="mt-8 text-5xl font-bold text-amber-400 drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] stroke-black">
                     {activeGiftEffect.name}
                  </h1>
@@ -291,13 +320,11 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                <div key={index} className="flex flex-col items-center gap-1 relative">
                   <button 
                     onClick={() => handleSeatClick(index)}
-                    className={`relative w-[58px] h-[58px] rounded-full flex items-center justify-center transition-all active:scale-95
-                      ${speaker ? '' : 'bg-black/20 border border-white/10 hover:bg-white/10'}`}
+                    className={`relative w-[58px] h-[58px] rounded-full flex items-center justify-center transition-all active:scale-95`}
                   >
                      {speaker ? (
                         <div className="relative w-full h-full flex items-center justify-center">
-                           {/* Avatar Container */}
-                           <div className={`w-full h-full rounded-full overflow-hidden ${
+                           <div className={`w-[86%] h-[86%] rounded-full overflow-hidden ${
                              !speaker.frame ? (speaker.id === 'u1' ? 'p-[2px] bg-gradient-to-tr from-amber-400 to-yellow-200 shadow-amber-500/50 shadow-lg' : 'p-[2px] bg-gradient-to-tr from-blue-400 to-cyan-200') : ''
                            }`}>
                              <img 
@@ -306,36 +333,26 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                                 className={`w-full h-full rounded-full object-cover ${!speaker.frame ? 'border-2 border-slate-900' : ''} ${speaker.isMuted ? 'grayscale' : ''}`}
                              />
                            </div>
-
-                           {/* VIP Frame Overlay - Adjusted scale and position */}
                            {speaker.frame && (
                               <img 
                                 src={speaker.frame} 
                                 alt="Frame" 
-                                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[135%] h-[135%] object-contain pointer-events-none z-10 drop-shadow-lg"
+                                className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10 drop-shadow-lg scale-[1.15]"
                               />
                            )}
-
-                           {/* VIP Badge Small (if no frame, or additional) */}
                            {speaker.isVip && !speaker.frame && (
                               <div className="absolute -bottom-1 -right-1 bg-amber-500 rounded-full p-1 border-2 border-slate-900 z-10">
                                  <Crown size={10} className="text-white" fill="white" />
                               </div>
                            )}
-
-                           {/* Mute Indicator */}
                            {speaker.isMuted && (
                               <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full z-20">
                                  <MicOff size={16} className="text-white" />
                               </div>
                            )}
-                           
-                           {/* Talking Indicator (Only if not muted) */}
                            {!speaker.isMuted && (
                               <div className="absolute inset-0 rounded-full border-2 border-green-500/50 animate-ping opacity-0"></div>
                            )}
-                           
-                           {/* Name Tag */}
                            <div className="absolute -bottom-5 w-full flex justify-center z-30">
                              <span className="text-[9px] text-white bg-black/40 backdrop-blur-sm px-2 rounded-full truncate max-w-[120%] border border-white/5">
                                {speaker.name}
@@ -343,12 +360,10 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                            </div>
                         </div>
                      ) : (
-                        <Mic size={18} className="text-white/30" />
-                     )}
-                     
-                     {/* Seat Number (Optional visual aid) */}
-                     {!speaker && (
-                       <span className="absolute top-1 right-2 text-[8px] text-white/20 font-mono">{index + 1}</span>
+                        <div className="relative w-full h-full flex items-center justify-center rounded-full bg-slate-800/40 border-2 border-dashed border-slate-600 hover:border-amber-500/50 hover:bg-slate-800 transition-all">
+                           <Mic size={18} className="text-slate-500" />
+                           <div className="absolute bottom-2 text-[8px] text-slate-500 font-mono opacity-50">{index + 1}</div>
+                        </div>
                      )}
                   </button>
                </div>
@@ -358,7 +373,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
 
       {/* Chat Area */}
       <div className="h-[35%] bg-gradient-to-t from-slate-950 via-slate-900/95 to-transparent px-4 pb-4 pt-10 flex flex-col justify-end relative">
-         {/* Top Fade for chat */}
          <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-transparent to-slate-900/10 pointer-events-none"></div>
 
          <div className="overflow-y-auto mb-4 space-y-2.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
@@ -396,7 +410,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                                  backgroundSize: 'cover',
                                  backgroundPosition: 'center',
                                  color: 'white',
-                                 textShadow: '0 1px 2px rgba(0,0,0,0.8), 0 0 5px rgba(0,0,0,0.5)', // Stronger shadow for readability on any bubble
+                                 textShadow: '0 1px 2px rgba(0,0,0,0.8), 0 0 5px rgba(0,0,0,0.5)', 
                                  fontWeight: '600'
                               } : {}}
                            >
@@ -411,50 +425,103 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
          </div>
 
          {/* Controls Bar */}
-         <div className="flex items-center gap-3">
+         <div className="flex items-center gap-2">
             <button 
-               onClick={() => {
-                   setIsMuted(!isMuted);
-                   const mySeatIdx = seats.findIndex(s => s?.id === currentUser.id);
-                   if (mySeatIdx !== -1) {
-                        setSeats(prev => prev.map((s, i) => i === mySeatIdx ? { ...s!, isMuted: !isMuted } : s));
-                   }
-                   addToast(!isMuted ? 'تم كتم الصوت' : 'تم تفعيل الصوت', !isMuted ? 'error' : 'success');
-               }}
-               className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95 ${
-                  isMuted ? 'bg-slate-800 text-white border border-slate-700' : 'bg-green-500 text-white shadow-green-900/50'
+               onClick={onToggleMute}
+               className={`w-12 h-12 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 active:scale-90 border-2 relative overflow-hidden group ${
+                  isMuted 
+                    ? 'bg-slate-800 text-slate-400 border-slate-600' 
+                    : 'bg-gradient-to-br from-green-500 to-emerald-600 text-white border-green-400 shadow-green-500/50'
                }`}
             >
-               {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+               {/* Pulse Animation when active */}
+               {!isMuted && (
+                  <span className="absolute inset-0 rounded-full bg-white/20 animate-ping opacity-75"></span>
+               )}
+               {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
             </button>
             
-            <div className="flex-1 bg-slate-800/80 backdrop-blur rounded-full h-11 flex items-center px-4 border border-slate-700 focus-within:border-slate-500 transition-colors">
+            <div className="flex-1 bg-slate-800/80 backdrop-blur rounded-full h-10 flex items-center px-4 border border-slate-700 focus-within:border-slate-500 transition-colors">
                <input 
                   type="text" 
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                   placeholder="قل شيئاً..."
-                  className="bg-transparent text-white w-full outline-none text-sm placeholder:text-slate-500"
+                  className="bg-transparent text-white w-full outline-none text-xs placeholder:text-slate-500"
                />
                <button onClick={handleSendMessage} className="ml-2 text-blue-400 hover:text-blue-300">
-                  <Send size={18} />
+                  <Send size={16} />
                </button>
             </div>
 
+            {/* Menu Grid Button */}
+             <button 
+               onClick={() => setShowMenuModal(true)}
+               className="w-10 h-10 bg-slate-800 rounded-full text-white border border-slate-700 shadow-lg flex items-center justify-center hover:bg-slate-700 transition-all active:scale-95"
+            >
+               <LayoutGrid size={18} />
+            </button>
+
+            {/* Gift Button */}
             <button 
                onClick={() => {
                   setGiftRecipientId(null); // Reset to 'All' default or nothing
                   setShowGiftModal(true);
                }}
-               className="w-11 h-11 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full text-white shadow-lg shadow-purple-900/50 flex items-center justify-center hover:scale-105 transition-transform active:scale-95"
+               className="w-10 h-10 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full text-white shadow-lg shadow-purple-900/50 flex items-center justify-center hover:scale-105 transition-transform active:scale-95"
             >
-               <GiftIcon size={20} />
+               <GiftIcon size={18} />
             </button>
          </div>
       </div>
 
-      {/* Gift Modal */}
+      {/* Menus and Modals */}
+      
+      {/* 1. Grid Menu Modal */}
+      <AnimatePresence>
+         {showMenuModal && (
+             <div className="fixed inset-0 z-[60] flex items-end justify-center pointer-events-none">
+                 <motion.div 
+                     initial={{ opacity: 0 }} 
+                     animate={{ opacity: 1 }} 
+                     exit={{ opacity: 0 }}
+                     onClick={() => setShowMenuModal(false)}
+                     className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto"
+                 />
+                 <motion.div 
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    className="relative w-full max-w-md bg-[#10141f] rounded-t-[30px] p-6 pb-8 border-t border-white/10 pointer-events-auto"
+                 >
+                    <div className="grid grid-cols-2 gap-4">
+                        <button 
+                           onClick={() => { setShowMenuModal(false); setShowGameModal(true); }}
+                           className="bg-slate-800 hover:bg-slate-700 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 active:scale-95 transition-all"
+                        >
+                            <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center text-green-400">
+                                <Gamepad2 size={24} />
+                            </div>
+                            <span className="font-bold text-sm text-white">مركز الألعاب</span>
+                        </button>
+                        
+                        <button 
+                           onClick={() => { setShowMenuModal(false); setShowRoomSettingsModal(true); }}
+                           className="bg-slate-800 hover:bg-slate-700 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 active:scale-95 transition-all"
+                        >
+                            <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400">
+                                <Settings size={24} />
+                            </div>
+                            <span className="font-bold text-sm text-white">إعدادات الغرفة</span>
+                        </button>
+                    </div>
+                 </motion.div>
+             </div>
+         )}
+      </AnimatePresence>
+
+      {/* 2. Gift Modal */}
       <AnimatePresence>
          {showGiftModal && (
             <div className="absolute inset-0 z-[60] flex items-end bg-black/50 backdrop-blur-sm" onClick={() => setShowGiftModal(false)}>
@@ -469,16 +536,15 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                   <div className="flex justify-between items-center mb-4">
                      <h3 className="text-white font-bold text-lg">إرسال هدية</h3>
                      <div className="bg-black/40 px-3 py-1.5 rounded-full flex items-center gap-2 border border-white/10">
-                        <span className="text-yellow-400 font-bold text-sm">🪙 {currentUser.coins}</span>
+                        <span className="text-yellow-400 font-bold text-sm">🪙 {currentUser.coins.toLocaleString()}</span>
                         <div className="w-4 h-4 rounded-full bg-yellow-500 flex items-center justify-center text-[10px] text-black font-bold">+</div>
                      </div>
                   </div>
 
-                  {/* Recipient Selector (Persons on Mic) */}
+                  {/* Recipient Selector */}
                   <div className="mb-4">
                      <p className="text-[10px] text-slate-400 mb-2">إرسال إلى:</p>
                      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                        {/* Option: All */}
                         <div 
                            onClick={() => setGiftRecipientId(null)}
                            className={`flex flex-col items-center gap-1 cursor-pointer min-w-[50px] ${!giftRecipientId ? 'opacity-100' : 'opacity-50 hover:opacity-100'}`}
@@ -489,7 +555,6 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                            <span className={`text-[10px] ${!giftRecipientId ? 'text-amber-400 font-bold' : 'text-slate-400'}`}>الغرفة</span>
                         </div>
 
-                        {/* Active Speakers */}
                         {seats.map((seat, idx) => {
                            if (!seat) return null;
                            const isSelected = giftRecipientId === seat.id;
@@ -537,6 +602,31 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({ room, onLeave, currentUser, gifts
                </motion.div>
             </div>
          )}
+      </AnimatePresence>
+
+      {/* 3. Fruit Game Modal */}
+      <AnimatePresence>
+        {showGameModal && (
+            <FruitGameModal 
+                isOpen={showGameModal}
+                onClose={() => setShowGameModal(false)}
+                userCoins={currentUser.coins}
+                onUpdateCoins={(newCoins) => onUpdateUser({...currentUser, coins: newCoins})}
+                winRate={gameSettings.fruitGameWinRate}
+            />
+        )}
+      </AnimatePresence>
+
+      {/* 4. Room Settings Modal */}
+      <AnimatePresence>
+        {showRoomSettingsModal && (
+            <RoomSettingsModal 
+                isOpen={showRoomSettingsModal}
+                onClose={() => setShowRoomSettingsModal(false)}
+                room={room}
+                onUpdate={onUpdateRoom}
+            />
+        )}
       </AnimatePresence>
 
       {/* User Profile Sheet */}

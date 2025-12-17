@@ -1,4 +1,4 @@
-import { Gift, Room, User, UserLevel, VIPPackage, StoreItem } from './types';
+import { Gift, Room, User, UserLevel, VIPPackage, StoreItem, Contributor, WheelItem } from './types';
 
 // Mock frames using frame-like borders or transparent PNGs
 const BASE_FRAME_URL = "https://cdn-icons-png.flaticon.com/512";
@@ -12,6 +12,25 @@ export const STORE_ITEMS: StoreItem[] = [
   { id: 'b_blue', name: 'فقاعة زرقاء', type: 'bubble', price: 200, url: 'https://img.freepik.com/free-vector/gradient-blue-background_23-2149332560.jpg' },
   { id: 'b_pink', name: 'فقاعة وردية', type: 'bubble', price: 400, url: 'https://img.freepik.com/free-vector/pink-gradient-background_23-2148946452.jpg' },
   { id: 'b_gold', name: 'فقاعة ذهبية', type: 'bubble', price: 1000, url: 'https://img.freepik.com/free-vector/golden-gradient-background_23-2148946455.jpg' },
+];
+
+export const WHEEL_ITEMS: WheelItem[] = [
+  { id: 'watermelon', label: 'بطيخ', color: '#10b981', icon: '🍉', multiplier: 2, probability: 45 },
+  { id: 'grape', label: 'برقوق', color: '#8b5cf6', icon: '🍇', multiplier: 2, probability: 45 },
+  { id: '777', label: 'Jackpot', color: '#f59e0b', icon: '💎', multiplier: 8, probability: 10 },
+  { id: 'watermelon', label: 'بطيخ', color: '#10b981', icon: '🍉', multiplier: 2, probability: 45 },
+  { id: 'grape', label: 'برقوق', color: '#8b5cf6', icon: '🍇', multiplier: 2, probability: 45 },
+  { id: 'apple', label: 'تفاح', color: '#ef4444', icon: '🍎', multiplier: 5, probability: 20 },
+  { id: 'watermelon', label: 'بطيخ', color: '#10b981', icon: '🍉', multiplier: 2, probability: 45 },
+  { id: 'grape', label: 'برقوق', color: '#8b5cf6', icon: '🍇', multiplier: 2, probability: 45 },
+];
+
+export const MOCK_CONTRIBUTORS: Contributor[] = [
+  { id: 'c1', name: 'الزعيم', avatar: 'https://picsum.photos/200?random=101', amount: 500000, rank: 1 },
+  { id: 'c2', name: 'سلطان', avatar: 'https://picsum.photos/200?random=102', amount: 320000, rank: 2 },
+  { id: 'c3', name: 'نواف', avatar: 'https://picsum.photos/200?random=103', amount: 150000, rank: 3 },
+  { id: 'c4', name: 'أميرة', avatar: 'https://picsum.photos/200?random=104', amount: 90000, rank: 4 },
+  { id: 'c5', name: 'خالد', avatar: 'https://picsum.photos/200?random=105', amount: 50000, rank: 5 },
 ];
 
 export const VIP_LEVELS: VIPPackage[] = [

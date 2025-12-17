@@ -64,10 +64,10 @@ const VIPModal: React.FC<VIPModalProps> = ({ user, vipLevels, onClose, onBuy }) 
                  <div className="flex items-center gap-4 relative z-10">
                     {/* Frame Preview */}
                     <div className="relative w-16 h-16 flex-shrink-0">
-                       <div className="absolute inset-0 rounded-full border border-white/10 bg-black">
+                       <div className="absolute inset-1 rounded-full border border-white/10 bg-black">
                           <img src={user.avatar} className="w-full h-full rounded-full opacity-50 grayscale" alt="preview" />
                        </div>
-                       <img src={vip.frameUrl} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[135%] h-[135%] object-contain pointer-events-none drop-shadow-lg" alt={vip.name} />
+                       <img src={vip.frameUrl} className="absolute inset-0 w-full h-full object-contain pointer-events-none drop-shadow-lg scale-[1.2]" alt={vip.name} />
                        <div className="absolute -bottom-1 -right-1 bg-black/80 text-[10px] px-1.5 rounded-full border border-white/10 text-white font-bold">
                           {vip.level}
                        </div>

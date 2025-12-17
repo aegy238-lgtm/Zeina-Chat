@@ -1,6 +1,6 @@
 import React from 'react';
 import { Room } from '../types';
-import { Users, Mic } from 'lucide-react';
+import { Users, Mic, BarChart2 } from 'lucide-react';
 
 interface RoomCardProps {
   room: Room;
@@ -11,42 +11,70 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, onClick }) => {
   return (
     <div 
       onClick={() => onClick(room)}
-      className="bg-slate-800 rounded-2xl overflow-hidden shadow-lg border border-slate-700 active:scale-95 transition-transform duration-200 cursor-pointer relative"
+      className="relative w-full h-32 bg-slate-800/50 rounded-2xl overflow-hidden border border-white/5 active:scale-95 transition-all duration-200 cursor-pointer group shadow-lg"
     >
-      {/* Category Tag */}
-      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-md px-2 py-1 rounded-lg text-xs font-bold text-white z-10 border border-white/10">
-        {room.category}
+      {/* Background Image with Blur/Darken */}
+      <div className="absolute inset-0">
+        <img src={room.thumbnail} alt={room.title} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/80 to-transparent"></div>
       </div>
 
-      {/* Image Area */}
-      <div className="h-32 w-full relative">
-        <img src={room.thumbnail} alt={room.title} className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
+      {/* Content Container */}
+      <div className="absolute inset-0 p-3 flex justify-between items-center">
         
-        {/* Host Avatar Overlap */}
-        <div className="absolute -bottom-4 left-4 border-4 border-slate-800 rounded-full">
-           <img src={room.speakers[0]?.avatar} className="w-12 h-12 rounded-full" alt="Host" />
-        </div>
-      </div>
+        {/* Right Side: Info */}
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+            {/* Host Avatar (Square with rounded corners + Border) */}
+            <div className="relative flex-shrink-0">
+                <div className="w-16 h-16 rounded-xl p-[2px] bg-gradient-to-br from-amber-400 to-orange-600 shadow-lg shadow-orange-900/30">
+                    <img src={room.speakers[0]?.avatar} className="w-full h-full rounded-[10px] object-cover" alt="Host" />
+                </div>
+                {/* Live Animation Icon */}
+                <div className="absolute -bottom-1 -right-1 bg-black/60 backdrop-blur rounded-md p-0.5 border border-white/10 flex items-center gap-0.5">
+                    <div className="w-0.5 h-2 bg-green-500 animate-[bounce_1s_infinite]"></div>
+                    <div className="w-0.5 h-3 bg-green-500 animate-[bounce_1.2s_infinite]"></div>
+                    <div className="w-0.5 h-2 bg-green-500 animate-[bounce_0.8s_infinite]"></div>
+                </div>
+            </div>
 
-      {/* Content */}
-      <div className="p-3 pt-5">
-        <h3 className="font-bold text-white text-lg truncate mb-1">{room.title}</h3>
-        <div className="flex justify-between items-center text-slate-400 text-xs">
-          <div className="flex items-center gap-1">
-             <span className="text-amber-400">{room.speakers[0]?.name}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-               <Mic size={12} />
-               <span>{room.speakers.length}</span>
+            {/* Texts */}
+            <div className="flex flex-col gap-1 min-w-0">
+                <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-white text-sm truncate leading-tight">{room.title}</h3>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/80 border border-white/5 whitespace-nowrap">
+                        {room.category}
+                    </span>
+                </div>
+                
+                <p className="text-[10px] text-slate-300 flex items-center gap-1 truncate">
+                    <span className="text-amber-400 font-bold">{room.speakers[0]?.name}</span>
+                    <span className="w-1 h-1 rounded-full bg-slate-500"></span>
+                    <span>ID: {room.id}</span>
+                </p>
+
+                {/* Tags / Mini Info */}
+                <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1 bg-black/30 px-2 py-0.5 rounded-full border border-white/5 text-[10px] text-slate-300">
+                        <Users size={10} className="text-blue-400" />
+                        <span>{room.listeners}</span>
+                    </div>
+                    {room.speakers.length > 1 && (
+                         <div className="flex items-center gap-1 bg-black/30 px-2 py-0.5 rounded-full border border-white/5 text-[10px] text-slate-300">
+                            <Mic size={10} className="text-green-400" />
+                            <span>{room.speakers.length}</span>
+                        </div>
+                    )}
+                </div>
             </div>
-            <div className="flex items-center gap-1">
-               <Users size={12} />
-               <span>{room.listeners}</span>
-            </div>
-          </div>
         </div>
+
+        {/* Left Side: Enter Button (Visual Cue) */}
+        <div className="flex-shrink-0 ml-2">
+             <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/10 group-hover:bg-amber-500 group-hover:text-black transition-colors">
+                <BarChart2 size={16} className="-rotate-90" />
+             </div>
+        </div>
+
       </div>
     </div>
   );

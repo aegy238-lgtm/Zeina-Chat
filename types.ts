@@ -41,6 +41,14 @@ export interface User {
   isMuted?: boolean;
 }
 
+export interface Contributor {
+  id: string;
+  name: string;
+  avatar: string;
+  amount: number; // Contribution amount
+  rank: number;
+}
+
 export interface Gift {
   id: string;
   name: string;
@@ -77,4 +85,17 @@ export interface Room {
   thumbnail: string;
   speakers: User[]; // Initial list of speakers
   background: string;
+}
+
+export interface GameSettings {
+  fruitGameWinRate: number; // 0 to 100 percentage
+}
+
+export interface WheelItem {
+  id: string;
+  label: string;
+  color: string;
+  icon: string;
+  multiplier: number;
+  probability: number; // Relative weight
 }

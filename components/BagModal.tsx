@@ -70,7 +70,7 @@ const BagModal: React.FC<BagModalProps> = ({ isOpen, onClose, items, user, onBuy
            </button>
         </div>
 
-        {/* List - Added min-h-0 and overscroll-contain for better scrolling */}
+        {/* List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide min-h-0 overscroll-contain">
            <div className="grid grid-cols-2 gap-3 pb-4">
              {filteredItems.map((item) => {
@@ -90,10 +90,12 @@ const BagModal: React.FC<BagModalProps> = ({ isOpen, onClose, items, user, onBuy
                    {/* Preview */}
                    <div className="relative w-20 h-20 flex-shrink-0 flex items-center justify-center bg-black/30 rounded-full mb-1">
                       {item.type === 'frame' ? (
-                         <>
-                            <img src={user.avatar} className="w-16 h-16 rounded-full opacity-60 grayscale" alt="preview" />
-                            <img src={item.url} className="absolute inset-0 w-full h-full object-contain pointer-events-none drop-shadow-lg scale-135" alt={item.name} />
-                         </>
+                         <div className="relative w-16 h-16">
+                            {/* Avatar Placeholder */}
+                            <img src={user.avatar} className="absolute inset-1 rounded-full w-[88%] h-[88%] object-cover opacity-60 grayscale" alt="preview" />
+                            {/* Frame Exact Fit */}
+                            <img src={item.url} className="absolute inset-0 w-full h-full object-contain pointer-events-none drop-shadow-lg scale-[1.2]" alt={item.name} />
+                         </div>
                       ) : (
                          <div 
                            className="w-16 h-12 rounded-xl flex items-center justify-center text-[8px] text-white font-bold shadow-sm"

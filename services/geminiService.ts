@@ -3,11 +3,58 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 const apiKey = process.env.API_KEY || ''; // In a real app, handle missing key gracefully
 const ai = new GoogleGenAI({ apiKey });
 
+// Circuit breaker state
+let isQuotaExceeded = false;
+let quotaResetTime = 0;
+
+const checkQuota = () => {
+  if (isQuotaExceeded) {
+    if (Date.now() > quotaResetTime) {
+      isQuotaExceeded = false;
+    } else {
+      return false;
+    }
+  }
+  return true;
+};
+
+const handleApiError = (error: any) => {
+  const msg = error?.toString() || '';
+  // Check for common quota error codes/messages
+  if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+    if (!isQuotaExceeded) {
+       console.warn("Gemini API Quota Exceeded. Switching to offline mode for 1 minute.");
+    }
+    isQuotaExceeded = true;
+    quotaResetTime = Date.now() + 60000; // 1 minute cooldown
+  } else {
+    console.error("Gemini API Error:", error);
+  }
+};
+
+const FALLBACK_MESSAGES = [
+  "منورين يا شباب",
+  "أهلا بالجميع 🌹",
+  "يا هلا والله",
+  "يسعد مساكم",
+  "كيف الحال؟",
+  "الغرفة نار 🔥",
+  "حي الله الجميع",
+  "منورين الحتة",
+  "مساء الخير",
+  "شو الأخبار؟",
+  "هلا وغلا"
+];
+
+const getRandomFallback = () => FALLBACK_MESSAGES[Math.floor(Math.random() * FALLBACK_MESSAGES.length)];
+
 /**
  * Simulates active chat participants in the room.
  */
 export const generateSimulatedChat = async (roomTitle: string, lastMessages: string[]): Promise<string> => {
+  // If no key or quota exceeded, return fallback immediately without calling API
   if (!apiKey) return "مرحبا بكم في الغرفة!";
+  if (!checkQuota()) return getRandomFallback();
   
   try {
     const prompt = `
@@ -28,10 +75,10 @@ export const generateSimulatedChat = async (roomTitle: string, lastMessages: str
       }
     });
 
-    return response.text?.trim() || "منورين يا شباب";
+    return response.text?.trim() || getRandomFallback();
   } catch (error) {
-    console.error("Gemini API Error:", error);
-    return "أهلا بالجميع 🌹";
+    handleApiError(error);
+    return getRandomFallback();
   }
 };
 
@@ -40,6 +87,7 @@ export const generateSimulatedChat = async (roomTitle: string, lastMessages: str
  */
 export const generateSystemAnnouncement = async (action: string, userName: string): Promise<string> => {
   if (!apiKey) return `${userName} ${action}`;
+  if (!checkQuota()) return `${userName} ${action}`;
 
   try {
     const prompt = `
@@ -57,6 +105,7 @@ export const generateSystemAnnouncement = async (action: string, userName: strin
     
     return response.text?.trim() || `رحبوا بالملك ${userName}!`;
   } catch (error) {
+    handleApiError(error);
     return `${userName} وصل!`;
   }
 };
