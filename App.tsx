@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Home, User as UserIcon, Plus, Bell, Crown, Gem, Settings, ChevronRight, Edit3, Share2, LogOut, Shield, Database, ShoppingBag, Camera, Trophy, Flame, Sparkles } from 'lucide-react';
 import RoomCard from './components/RoomCard';
 import VoiceRoom from './components/VoiceRoom';
+import AuthScreen from './components/AuthScreen';
 import Toast, { ToastMessage } from './components/Toast';
 import VIPModal from './components/VIPModal';
 import AdminPanel from './components/AdminPanel';
@@ -10,23 +11,40 @@ import EditProfileModal from './components/EditProfileModal';
 import BagModal from './components/BagModal';
 import CreateRoomModal from './components/CreateRoomModal';
 import MiniPlayer from './components/MiniPlayer';
-import { MOCK_ROOMS, CURRENT_USER, VIP_LEVELS, GIFTS as INITIAL_GIFTS, STORE_ITEMS, MOCK_CONTRIBUTORS } from './constants';
+import { MOCK_ROOMS, VIP_LEVELS, GIFTS as INITIAL_GIFTS, STORE_ITEMS, MOCK_CONTRIBUTORS } from './constants';
 import { Room, User, VIPPackage, UserLevel, Gift, StoreItem, GameSettings } from './types';
 import { AnimatePresence } from 'framer-motion';
-import { db } from './services/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, setDoc } from 'firebase/firestore';
+import { db, auth } from './services/firebase';
+import { collection, onSnapshot, addDoc, updateDoc, doc, setDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+
+// --- CONFIGURATION ---
+// ضع هنا البريد الإلكتروني الذي تريده أن يكون مدير التطبيق
+const ADMIN_EMAILS = ["admin@gmail.com"]; 
 
 export default function App() {
+  const [initializing, setInitializing] = useState(true);
+  const [currentUserAuth, setCurrentUserAuth] = useState<any>(null); // Firebase Auth User
+  
   const [activeTab, setActiveTab] = useState<'home' | 'profile' | 'rank'>('home');
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
-  const [isRoomMinimized, setIsRoomMinimized] = useState(false); // Track minimized state
-  const [isUserMuted, setIsUserMuted] = useState(true); // Track mute state at App level for persistence during minimize
+  const [isRoomMinimized, setIsRoomMinimized] = useState(false);
+  const [isUserMuted, setIsUserMuted] = useState(true);
 
-  const [user, setUser] = useState<User>(CURRENT_USER);
-  const [rooms, setRooms] = useState<Room[]>([]); // Initialize empty, fetch from Firebase
+  // Initialize user state as null initially
+  const [user, setUser] = useState<User | null>(null);
+  const [rooms, setRooms] = useState<Room[]>([]); 
   const [vipLevels, setVipLevels] = useState<VIPPackage[]>(VIP_LEVELS);
   const [gifts, setGifts] = useState<Gift[]>(INITIAL_GIFTS);
   const [storeItems, setStoreItems] = useState<StoreItem[]>(STORE_ITEMS);
+  const [gameSettings, setGameSettings] = useState<GameSettings>({
+     slotsWinRate: 35,
+     wheelWinRate: 45,
+     luckyGiftWinRate: 30,
+     luckyGiftRefundPercent: 200
+  });
+  const [bannerImage, setBannerImage] = useState('https://img.freepik.com/free-vector/gradient-music-festival-twitch-banner_23-2149051838.jpg');
+
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showVIPModal, setShowVIPModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -34,20 +52,98 @@ export default function App() {
   const [showBagModal, setShowBagModal] = useState(false);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
 
-  // Banner State
-  const [bannerImage, setBannerImage] = useState('https://img.freepik.com/free-vector/gradient-music-festival-twitch-banner_23-2149051838.jpg');
-
-  // Game Settings (Controlled by Admin)
-  const [gameSettings, setGameSettings] = useState<GameSettings>({
-     slotsWinRate: 35, // Default 35% win rate for Slots
-     wheelWinRate: 45, // Default 45% win rate for Wheel
-     luckyGiftWinRate: 30, // 30% Chance to trigger lucky gift win
-     luckyGiftRefundPercent: 200 // Return 2x the cost (200%) if won
-  });
-
-  // --- FIREBASE SYNC ---
+  // --- AUTH LISTENER & ADMIN PROMOTION ---
   useEffect(() => {
-    // Subscribe to rooms collection
+    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      setCurrentUserAuth(authUser);
+      if (authUser) {
+         const userRef = doc(db, "users", authUser.uid);
+         const userSnap = await getDoc(userRef);
+         
+         // Check if this email should be an admin
+         const shouldBeAdmin = authUser.email && ADMIN_EMAILS.includes(authUser.email);
+
+         if (!userSnap.exists()) {
+            // New User Creation
+            const newUserDoc: User = {
+                id: authUser.uid,
+                name: authUser.displayName || 'مستخدم جديد',
+                avatar: authUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.uid}`,
+                level: UserLevel.NEW,
+                coins: 500, // Sign up bonus
+                isVip: false,
+                vipLevel: 0,
+                bio: 'مستخدم جديد',
+                stats: { likes: 0, visitors: 0, following: 0, followers: 0 },
+                ownedItems: [],
+                isFollowing: false,
+                isMuted: false,
+                isAdmin: shouldBeAdmin // Set admin status on creation
+            };
+            await setDoc(userRef, newUserDoc);
+            setUser(newUserDoc);
+         } else {
+            // Existing User: Update Admin status if needed
+            const userData = userSnap.data() as User;
+            if (shouldBeAdmin && !userData.isAdmin) {
+                await updateDoc(userRef, { isAdmin: true });
+                setUser({ ...userData, isAdmin: true });
+                console.log("User promoted to Admin automatically");
+            } else {
+                setUser(userData);
+            }
+         }
+      } else {
+         setUser(null);
+      }
+      setInitializing(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // --- DATA SEEDING (System Data) ---
+  useEffect(() => {
+     const seedDatabase = async () => {
+        // 1. Check/Seed Gifts
+        const giftsSnapshot = await getDocs(collection(db, "gifts"));
+        if (giftsSnapshot.empty) {
+           const batch = writeBatch(db);
+           INITIAL_GIFTS.forEach(g => batch.set(doc(db, "gifts", g.id), g));
+           await batch.commit();
+        }
+
+        // 2. Check/Seed Store
+        const storeSnapshot = await getDocs(collection(db, "store_items"));
+        if (storeSnapshot.empty) {
+           const batch = writeBatch(db);
+           STORE_ITEMS.forEach(i => batch.set(doc(db, "store_items", i.id), i));
+           await batch.commit();
+        }
+        
+        // 3. Check/Seed VIP
+        const vipSnapshot = await getDocs(collection(db, "vip_levels"));
+        if (vipSnapshot.empty) {
+           const batch = writeBatch(db);
+           VIP_LEVELS.forEach(v => batch.set(doc(db, "vip_levels", v.level.toString()), v));
+           await batch.commit();
+        }
+
+        // 4. Check/Seed Settings
+        const settingsDoc = await getDoc(doc(db, "settings", "global"));
+        if (!settingsDoc.exists()) {
+           await setDoc(doc(db, "settings", "global"), {
+              gameSettings: gameSettings,
+              bannerImage: bannerImage
+           });
+        }
+     };
+     seedDatabase();
+  }, []);
+
+  // --- REAL-TIME LISTENERS ---
+  
+  // 1. Listen to Rooms
+  useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "rooms"), (snapshot) => {
       const fetchedRooms = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -55,30 +151,78 @@ export default function App() {
       })) as Room[];
       setRooms(fetchedRooms);
     });
-
     return () => unsubscribe();
   }, []);
 
-  const handleRoomJoin = (room: Room) => {
-    setCurrentRoom(room);
-    setIsRoomMinimized(false);
-    setIsUserMuted(true); // Reset mute on join
-    
-    // Update listeners count in Firebase (Simple increment simulation)
-    // In a real app, you'd add the user ID to a subcollection
-    const roomRef = doc(db, "rooms", room.id);
-    updateDoc(roomRef, {
-        listeners: (room.listeners || 0) + 1
-    }).catch(console.error);
+  // 2. Listen to Current User (if logged in)
+  useEffect(() => {
+     if (!currentUserAuth) return;
+     const unsubscribe = onSnapshot(doc(db, "users", currentUserAuth.uid), (doc) => {
+        if (doc.exists()) {
+           setUser(doc.data() as User);
+        }
+     });
+     return () => unsubscribe();
+  }, [currentUserAuth]);
+
+  // 3. Listen to System Collections (Gifts, Store, VIP, Settings)
+  useEffect(() => {
+     const unsubGifts = onSnapshot(collection(db, "gifts"), (snap) => setGifts(snap.docs.map(d => d.data() as Gift)));
+     const unsubStore = onSnapshot(collection(db, "store_items"), (snap) => setStoreItems(snap.docs.map(d => d.data() as StoreItem)));
+     const unsubVip = onSnapshot(collection(db, "vip_levels"), (snap) => {
+        const vips = snap.docs.map(d => d.data() as VIPPackage);
+        setVipLevels(vips.sort((a,b) => a.level - b.level));
+     });
+     const unsubSettings = onSnapshot(doc(db, "settings", "global"), (doc) => {
+        if (doc.exists()) {
+           const data = doc.data();
+           if (data.gameSettings) setGameSettings(data.gameSettings);
+           if (data.bannerImage) setBannerImage(data.bannerImage);
+        }
+     });
+
+     return () => {
+        unsubGifts(); unsubStore(); unsubVip(); unsubSettings();
+     };
+  }, []);
+
+
+  // --- ACTIONS ---
+
+  const handleLogout = async () => {
+      if (confirm("هل أنت متأكد من تسجيل الخروج؟")) {
+          await signOut(auth);
+          setUser(null);
+          setCurrentRoom(null);
+          addToast("تم تسجيل الخروج", 'success');
+      }
   };
 
-  const handleRoomLeave = () => {
-    if (currentRoom) {
-        // Decrement listeners count
-        const roomRef = doc(db, "rooms", currentRoom.id);
-        updateDoc(roomRef, {
-            listeners: Math.max(0, (currentRoom.listeners || 1) - 1)
-        }).catch(console.error);
+  const handleRoomJoin = async (room: Room) => {
+    if(!user) return;
+    setCurrentRoom(room);
+    setIsRoomMinimized(false);
+    setIsUserMuted(true); 
+    
+    try {
+       await updateDoc(doc(db, "rooms", room.id), {
+          listeners: (room.listeners || 0) + 1
+       });
+    } catch (e) { console.error(e); }
+  };
+
+  const handleRoomLeave = async () => {
+    if (currentRoom && user) {
+       try {
+           await updateDoc(doc(db, "rooms", currentRoom.id), {
+               listeners: Math.max(0, (currentRoom.listeners || 1) - 1)
+           });
+           
+           const updatedSpeakers = currentRoom.speakers.filter(s => s.id !== user.id);
+           if (updatedSpeakers.length !== currentRoom.speakers.length) {
+              await updateDoc(doc(db, "rooms", currentRoom.id), { speakers: updatedSpeakers });
+           }
+       } catch (e) { console.error(e); }
     }
     setCurrentRoom(null);
     setIsRoomMinimized(false);
@@ -92,22 +236,27 @@ export default function App() {
      }, 3000);
   };
 
-  const handleUpdateProfile = (updatedData: Partial<User>) => {
-     setUser(prev => ({ ...prev, ...updatedData }));
-     addToast("تم تحديث الملف الشخصي بنجاح", 'success');
+  const handleUpdateProfile = async (updatedData: Partial<User>) => {
+     if(!user) return;
+     try {
+        await updateDoc(doc(db, "users", user.id), updatedData);
+        addToast("تم تحديث الملف الشخصي بنجاح", 'success');
+     } catch(e) {
+        addToast("فشل التحديث", 'error');
+     }
   };
 
   const handleCreateRoom = async (roomData: Pick<Room, 'title' | 'category' | 'thumbnail' | 'background'>) => {
+     if(!user) return;
      const newRoomData: Omit<Room, 'id'> = {
         ...roomData,
         hostId: user.id,
         listeners: 0,
-        speakers: [user] // Creator starts as a speaker/host
+        speakers: [user] 
      };
      
      try {
         const docRef = await addDoc(collection(db, "rooms"), newRoomData);
-        // We don't need to manually setRooms because onSnapshot will catch it
         const newRoomWithId = { id: docRef.id, ...newRoomData } as Room;
         setCurrentRoom(newRoomWithId);
         setIsRoomMinimized(false);
@@ -120,83 +269,107 @@ export default function App() {
   
   const handleUpdateRoom = async (roomId: string, updatedData: Partial<Room>) => {
      try {
-        const roomRef = doc(db, "rooms", roomId);
-        await updateDoc(roomRef, updatedData);
-        if (currentRoom && currentRoom.id === roomId) {
-           setCurrentRoom(prev => prev ? { ...prev, ...updatedData } : null);
-        }
+        await updateDoc(doc(db, "rooms", roomId), updatedData);
         addToast("تم تحديث إعدادات الغرفة", "success");
      } catch (e) {
-        console.error(e);
         addToast("فشل تحديث الغرفة", "error");
      }
   };
 
-  const handleBuyVIP = (pkg: VIPPackage) => {
+  const handleBuyVIP = async (pkg: VIPPackage) => {
+     if (!user) return;
      if (user.coins >= pkg.cost) {
-        setUser(prev => ({
-           ...prev,
-           coins: prev.coins - pkg.cost,
-           isVip: true,
-           vipLevel: pkg.level,
-           frame: pkg.frameUrl,
-           level: UserLevel.VIP 
-        }));
-        addToast(`مبروك! تم تفعيل عضوية ${pkg.name} بنجاح`, 'success');
+        try {
+           await updateDoc(doc(db, "users", user.id), {
+              coins: user.coins - pkg.cost,
+              isVip: true,
+              vipLevel: pkg.level,
+              frame: pkg.frameUrl,
+              level: UserLevel.VIP 
+           });
+           addToast(`مبروك! تم تفعيل عضوية ${pkg.name} بنجاح`, 'success');
+        } catch(e) {
+           addToast("حدث خطأ أثناء الشراء", 'error');
+        }
      } else {
         addToast("رصيدك غير كافي لإتمام العملية", 'error');
      }
   };
 
-  // Buy item from Bag/Store
-  const handleBuyStoreItem = (item: StoreItem) => {
+  const handleBuyStoreItem = async (item: StoreItem) => {
+     if (!user) return;
      if (user.coins >= item.price) {
-        setUser(prev => ({
-           ...prev,
-           coins: prev.coins - item.price,
-           ownedItems: [...(prev.ownedItems || []), item.id]
-        }));
-        addToast(`تم شراء ${item.name} بنجاح`, 'success');
+        try {
+           const ownedItems = user.ownedItems || [];
+           if (ownedItems.includes(item.id)) return;
+           
+           await updateDoc(doc(db, "users", user.id), {
+               coins: user.coins - item.price,
+               ownedItems: [...ownedItems, item.id]
+           });
+           addToast(`تم شراء ${item.name} بنجاح`, 'success');
+        } catch(e) {
+           addToast("حدث خطأ", 'error');
+        }
      } else {
         addToast("رصيدك غير كافي", 'error');
      }
   };
 
-  // Equip item
-  const handleEquipStoreItem = (item: StoreItem) => {
-     if (item.type === 'frame') {
-        setUser(prev => ({ ...prev, frame: item.url }));
-        addToast(`تم تجهيز الإطار ${item.name}`, 'success');
-     } else {
-        setUser(prev => ({ ...prev, activeBubble: item.url }));
-        addToast(`تم تفعيل الفقاعة ${item.name}`, 'success');
+  const handleEquipStoreItem = async (item: StoreItem) => {
+     if (!user) return;
+     try {
+        if (item.type === 'frame') {
+           await updateDoc(doc(db, "users", user.id), { frame: item.url });
+           addToast(`تم تجهيز الإطار ${item.name}`, 'success');
+        } else {
+           await updateDoc(doc(db, "users", user.id), { activeBubble: item.url });
+           addToast(`تم تفعيل الفقاعة ${item.name}`, 'success');
+        }
+     } catch(e) {
+        addToast("حدث خطأ", 'error');
      }
   };
+
+  // --- RENDER ---
+
+  if (initializing) {
+      return (
+          <div className="h-[100dvh] w-full bg-[#0f172a] flex items-center justify-center">
+              <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+      );
+  }
+
+  // If not logged in, show Auth Screen
+  if (!user) {
+      return <AuthScreen />;
+  }
 
   return (
     <div className="h-[100dvh] w-full bg-[#0f172a] text-white relative md:max-w-md mx-auto shadow-2xl overflow-hidden flex flex-col font-cairo">
       <Toast toasts={toasts} onRemove={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
       
-      {/* Admin Panel */}
+      {/* Admin Panel (Only for Admins) */}
       <AnimatePresence>
-         {showAdminPanel && (
+         {showAdminPanel && user.isAdmin && (
             <AdminPanel 
                isOpen={showAdminPanel} 
                onClose={() => setShowAdminPanel(false)}
                rooms={rooms}
                setRooms={setRooms}
                currentUser={user}
-               onUpdateUser={setUser}
+               onUpdateUser={() => {}} 
                vipLevels={vipLevels}
-               setVipLevels={setVipLevels}
+               setVipLevels={() => {}}
                gifts={gifts}
-               setGifts={setGifts}
+               setGifts={() => {}} 
                storeItems={storeItems}
-               setStoreItems={setStoreItems}
+               setStoreItems={() => {}} 
                gameSettings={gameSettings}
-               setGameSettings={setGameSettings}
+               setGameSettings={() => {}} 
                bannerImage={bannerImage}
-               setBannerImage={setBannerImage}
+               setBannerImage={() => {}} 
             />
          )}
       </AnimatePresence>
@@ -246,13 +419,13 @@ export default function App() {
          )}
       </AnimatePresence>
 
-      {/* Active Room Overlay - Always rendered if room exists to maintain chat state, visually hidden if minimized */}
+      {/* Active Room Overlay */}
       {currentRoom && (
         <div className={isRoomMinimized ? 'invisible pointer-events-none absolute' : 'visible pointer-events-auto'}>
            <VoiceRoom 
               room={currentRoom} 
               currentUser={user}
-              onUpdateUser={setUser}
+              onUpdateUser={() => {}} 
               onLeave={handleRoomLeave} 
               onMinimize={() => setIsRoomMinimized(true)}
               gifts={gifts}
@@ -304,14 +477,14 @@ export default function App() {
            {activeTab === 'home' && (
               <div className="mt-2 space-y-3">
                  
-                 {/* Banner Section - Compact Version */}
+                 {/* Banner Section */}
                  <div className="px-4 relative group">
                     <div className="relative w-full h-28 rounded-2xl overflow-hidden shadow-lg border border-white/10">
                        <img src={bannerImage} className="w-full h-full object-cover transition-transform duration-700 hover:scale-105" alt="Event Banner" />
                     </div>
                  </div>
 
-                 {/* Top Contributors Section (Compact) */}
+                 {/* Top Contributors */}
                  <div className="px-4">
                     <div className="flex justify-between items-center mb-2">
                        <h2 className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -362,7 +535,7 @@ export default function App() {
                        ))}
                        {rooms.length === 0 && (
                           <div className="text-center py-8 text-slate-500 border border-dashed border-white/10 rounded-xl text-xs">
-                             لا توجد غرف نشطة حالياً. كن أول من ينشئ غرفة!
+                             جاري تحميل الغرف أو لا توجد غرف نشطة...
                           </div>
                        )}
                     </div>
@@ -379,26 +552,11 @@ export default function App() {
                    <h2 className="text-2xl font-black mb-1">قائمة المتصدرين</h2>
                    <p className="text-amber-100/80 text-xs font-medium uppercase tracking-wider">أساطير هذا الأسبوع</p>
                 </div>
-                
-                <div className="bg-slate-900 rounded-3xl p-2 space-y-1 border border-white/5">
-                   {[1,2,3,4,5].map((i) => (
-                      <div key={i} className={`flex items-center gap-4 p-3 rounded-2xl transition-colors ${i < 4 ? 'hover:bg-white/5' : ''}`}>
-                         <span className={`font-black text-xl w-8 text-center ${i === 1 ? 'text-yellow-400 drop-shadow-lg' : i === 2 ? 'text-slate-300' : i === 3 ? 'text-orange-400' : 'text-slate-600'}`}>{i}</span>
-                         <img src={`https://picsum.photos/50?random=${i+20}`} className="w-12 h-12 rounded-full border border-white/10" alt="Rank" />
-                         <div className="flex-1">
-                            <h4 className="font-bold text-sm">داعم مميز {i}</h4>
-                            <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
-                               <Gem size={10} className="text-purple-400" />
-                               <span>{(10000 - (i * 1000)).toLocaleString()} نقطة</span>
-                            </div>
-                         </div>
-                      </div>
-                   ))}
-                </div>
+                <div className="text-center text-slate-500 p-4">قريباً.. يتم ربط البيانات الحقيقية</div>
              </div>
            )}
 
-           {/* Professional Profile Tab */}
+           {/* Profile Tab */}
            {activeTab === 'profile' && (
              <div className="relative">
                 {/* Header Image (Cover) */}
@@ -441,15 +599,15 @@ export default function App() {
                       </div>
                       <div className="flex gap-4 text-center mb-1">
                          <div>
-                            <div className="font-bold text-lg">{user.stats?.following}</div>
+                            <div className="font-bold text-lg">{user.stats?.following || 0}</div>
                             <div className="text-[10px] text-slate-400">متابعة</div>
                          </div>
                          <div>
-                            <div className="font-bold text-lg">{user.stats?.followers}</div>
+                            <div className="font-bold text-lg">{user.stats?.followers || 0}</div>
                             <div className="text-[10px] text-slate-400">متابعين</div>
                          </div>
                          <div>
-                            <div className="font-bold text-lg">{user.stats?.visitors}</div>
+                            <div className="font-bold text-lg">{user.stats?.visitors || 0}</div>
                             <div className="text-[10px] text-slate-400">زوار</div>
                          </div>
                       </div>
@@ -459,6 +617,11 @@ export default function App() {
                       <h2 className="text-2xl font-bold flex items-center gap-2">
                          {user.name}
                          <span className="bg-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-black">Lv.{user.level}</span>
+                         {user.isAdmin && (
+                            <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                               <Shield size={10} /> ADMIN
+                            </span>
+                         )}
                       </h2>
                       <div className="mt-1 flex items-center gap-1">
                         <span className={`font-mono text-xs ${user.isSpecialId ? "font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-sm italic tracking-wider" : "text-slate-400"}`}>
@@ -487,16 +650,19 @@ export default function App() {
 
                    {/* Menu Items */}
                    <div className="bg-slate-900 rounded-2xl border border-white/5 overflow-hidden">
-                      <div 
-                         onClick={() => setShowAdminPanel(true)} 
-                         className="flex items-center justify-between p-4 border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors bg-gradient-to-r from-slate-900 to-slate-800"
-                      >
-                         <div className="flex items-center gap-3">
-                            <Database size={18} className="text-red-500" />
-                            <span className="text-sm font-bold text-red-400">لوحة التحكم (الإدارة)</span>
+                      {/* Admin Panel Link (Only for Admins) */}
+                      {user.isAdmin && (
+                         <div 
+                            onClick={() => setShowAdminPanel(true)} 
+                            className="flex items-center justify-between p-4 border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors bg-gradient-to-r from-slate-900 to-slate-800"
+                         >
+                            <div className="flex items-center gap-3">
+                               <Database size={18} className="text-red-500" />
+                               <span className="text-sm font-bold text-red-400">لوحة التحكم (الإدارة)</span>
+                            </div>
+                            <ChevronRight size={16} className="text-slate-600" />
                          </div>
-                         <ChevronRight size={16} className="text-slate-600" />
-                      </div>
+                      )}
 
                       {[
                          { icon: <Crown size={18} className="text-amber-500" />, label: 'متجر الإطارات VIP', badge: 'جديد', action: () => setShowVIPModal(true) },
@@ -515,7 +681,7 @@ export default function App() {
                             </div>
                          </div>
                       ))}
-                      <div onClick={() => { if(confirm("هل أنت متأكد من تسجيل الخروج؟")) addToast("تم تسجيل الخروج", 'success'); }} className="flex items-center justify-between p-4 hover:bg-red-900/10 cursor-pointer transition-colors group">
+                      <div onClick={handleLogout} className="flex items-center justify-between p-4 hover:bg-red-900/10 cursor-pointer transition-colors group">
                             <div className="flex items-center gap-3">
                                 <LogOut size={18} className="text-red-500" />
                                <span className="text-sm font-medium text-red-500">تسجيل الخروج</span>

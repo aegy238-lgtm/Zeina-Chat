@@ -41,6 +41,7 @@ export interface User {
   isFollowing?: boolean;
   isMuted?: boolean;
   isSpecialId?: boolean; // New property for Special IDs
+  isAdmin?: boolean; // New property for Admin Access
 }
 
 export interface Contributor {

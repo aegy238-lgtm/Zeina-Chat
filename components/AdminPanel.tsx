@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Users, Radio, Settings, X, Search, 
@@ -7,6 +7,8 @@ import {
   Coins, Crown, BarChart3, Bell, Power, Edit2, Save, Image as ImageIcon, Upload, Gift as GiftIcon, Plus, Wallet, ArrowRight, ShoppingBag, FileText, Gamepad2, Hash, Sparkles, Clover
 } from 'lucide-react';
 import { Room, User, UserLevel, VIPPackage, Gift, StoreItem, GameSettings, ItemType } from '../types';
+import { db } from '../services/firebase';
+import { collection, doc, updateDoc, deleteDoc, setDoc, getDocs, onSnapshot, increment } from 'firebase/firestore';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -27,17 +29,8 @@ interface AdminPanelProps {
   setBannerImage: React.Dispatch<React.SetStateAction<string>>;
 }
 
-// Mock data for the user table (since we only have one real user in state)
-const MOCK_ALL_USERS = [
-  { id: 'u1', name: 'الملك', level: UserLevel.DIAMOND, coins: 500000, status: 'active', ip: '192.168.1.1', isSpecialId: true },
-  { id: 'u2', name: 'سارة', level: UserLevel.GOLD, coins: 12000, status: 'active', ip: '192.168.1.2', isSpecialId: false },
-  { id: 'u3', name: 'GamerPro', level: UserLevel.BRONZE, coins: 500, status: 'banned', ip: '192.168.1.55', isSpecialId: false },
-  { id: 'u4', name: 'ضيف 102', level: UserLevel.NEW, coins: 0, status: 'active', ip: '192.168.1.9', isSpecialId: false },
-  { id: '829102', name: 'ضيف كريم', level: UserLevel.SILVER, coins: 50000, status: 'active', ip: '127.0.0.1', isSpecialId: false }, 
-];
-
 const AdminPanel: React.FC<AdminPanelProps> = ({ 
-  isOpen, onClose, rooms, setRooms, currentUser, onUpdateUser, vipLevels, setVipLevels, gifts, setGifts, storeItems, setStoreItems, gameSettings, setGameSettings, bannerImage, setBannerImage
+  isOpen, onClose, rooms, currentUser, vipLevels, gifts, storeItems, gameSettings, bannerImage
 }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'rooms' | 'vip' | 'gifts' | 'store' | 'games' | 'settings'>('dashboard');
   
@@ -62,28 +55,40 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [idSearchModalOpen, setIdSearchModalOpen] = useState(false);
   const [searchIdInput, setSearchIdInput] = useState('');
 
-  const [localUsers, setLocalUsers] = useState([...MOCK_ALL_USERS, { 
-    id: currentUser.id === 'me' ? '829102' : currentUser.id, // Ensure current user matches mock ID for searching
-    name: currentUser.name, 
-    level: currentUser.level, 
-    coins: currentUser.coins, 
-    status: 'active',
-    ip: '127.0.0.1',
-    isSpecialId: currentUser.isSpecialId || false
-  }]);
+  const [localUsers, setLocalUsers] = useState<User[]>([]);
+
+  // Fetch Users from Firestore for the table
+  useEffect(() => {
+     if(isOpen) {
+        const unsubscribe = onSnapshot(collection(db, "users"), (snapshot) => {
+            const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+            setLocalUsers(users);
+        });
+        return () => unsubscribe();
+     }
+  }, [isOpen]);
 
   if (!isOpen) return null;
+  
+  // Security Check: If user is not admin, do not render
+  if (!currentUser.isAdmin) return null;
 
   // --- Handlers ---
 
-  const handleDeleteRoom = (roomId: string) => {
+  const handleDeleteRoom = async (roomId: string) => {
     if (confirm('هل أنت متأكد من حذف هذه الغرفة وإغلاقها نهائياً؟')) {
-      setRooms(prev => prev.filter(r => r.id !== roomId));
+       try {
+          await deleteDoc(doc(db, "rooms", roomId));
+       } catch(e) { console.error(e); }
     }
   };
 
-  const handleBanUser = (userId: string) => {
-    setLocalUsers(prev => prev.map(u => u.id === userId ? { ...u, status: u.status === 'banned' ? 'active' : 'banned' } : u));
+  const handleBanUser = async (userId: string, currentStatus: string) => {
+     try {
+        await updateDoc(doc(db, "users", userId), {
+           status: currentStatus === 'active' || !currentStatus ? 'banned' : 'active'
+        });
+     } catch(e) { alert("حدث خطأ"); }
   };
 
   // Charge Logic
@@ -102,47 +107,39 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     setIdChangeModalOpen(true);
   };
 
-  const handleConfirmIdChange = () => {
+  const handleConfirmIdChange = async () => {
     if (!selectedUserForIdChange || !newIdValue.trim()) return;
 
-    // Update Local Users List
-    setLocalUsers(prev => prev.map(u => u.id === selectedUserForIdChange.id ? { ...u, id: newIdValue, isSpecialId: isNewIdSpecial } : u));
+    // NOTE: Changing ID in Firestore means creating a new doc and deleting old one if we use ID as key.
+    // However, since we used hardcoded ID or Auth UID, we usually can't change the Document ID easily.
+    // For this simulation, we will update a 'displayId' field or simply 'id' field if stored inside data.
+    // Assuming 'id' field in data is what we display:
     
-    // Check if it's the current user to update Global State
-    if (selectedUserForIdChange.id === currentUser.id || selectedUserForIdChange.id === '829102' || selectedUserForIdChange.name === currentUser.name) {
-       onUpdateUser({ ...currentUser, id: newIdValue, isSpecialId: isNewIdSpecial });
+    try {
+        await updateDoc(doc(db, "users", selectedUserForIdChange.id), {
+            id: newIdValue, // This updates the field inside the doc, not the doc key
+            isSpecialId: isNewIdSpecial
+        });
+        alert(`تم تغيير معرف المستخدم إلى ${newIdValue}`);
+        setIdChangeModalOpen(false);
+    } catch(e) {
+        alert("فشل تغيير المعرف");
     }
-
-    alert(`تم تغيير معرف المستخدم إلى ${newIdValue} ${isNewIdSpecial ? '(مميز)' : ''}`);
-    setIdChangeModalOpen(false);
   };
 
   const handleSearchAndOpenCharge = () => {
     if (!searchIdInput.trim()) return;
     
-    // Attempt to find user locally
+    // Attempt to find user locally from the fetched list
     let foundUser = localUsers.find(
-       u => u.id === searchIdInput || u.id === `u${searchIdInput}` || u.id === searchIdInput.replace('u', '')
+       u => u.id === searchIdInput
     );
 
-    // If not found, simulate fetching from database (create mock user for demo)
+    // If not found, simulate creation? No, better to stick to real DB in this mode.
+    // Or check if user exists in DB via query? 
     if (!foundUser) {
-       const confirmCreate = confirm('المستخدم غير موجود في القائمة المحلية. هل تريد المتابعة كعملية شحن لمستخدم جديد/خارجي؟');
-       if (confirmCreate) {
-          foundUser = {
-             id: searchIdInput,
-             name: `مستخدم ${searchIdInput}`,
-             level: UserLevel.NEW,
-             coins: 0,
-             status: 'active',
-             ip: 'Unknown',
-             isSpecialId: false
-          };
-          // Add to local list to reflect changes immediately
-          setLocalUsers(prev => [...prev, foundUser!]);
-       } else {
-          return;
-       }
+        alert("المستخدم غير موجود");
+        return;
     }
 
     if (foundUser) {
@@ -167,9 +164,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
          if (event.target?.result) {
-            setBannerImage(event.target.result as string);
+            const newBanner = event.target.result as string;
+            await updateDoc(doc(db, "settings", "global"), { bannerImage: newBanner });
             alert("تم تحديث البانر الرئيسي بنجاح");
          }
       };
@@ -177,7 +175,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // GENERIC IMAGE UPLOAD HANDLER FOR MODALS
   const handleItemImageUpload = (
       e: React.ChangeEvent<HTMLInputElement>, 
       setter: React.Dispatch<React.SetStateAction<any>>, 
@@ -195,78 +192,89 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       }
   };
 
-  const handleConfirmCharge = () => {
+  const handleConfirmCharge = async () => {
     const amount = Number(chargeAmount);
     if (selectedUserForCharge && !isNaN(amount) && amount > 0) {
-       if (selectedUserForCharge.id === currentUser.id || selectedUserForCharge.id === '829102') {
-          onUpdateUser({ ...currentUser, coins: currentUser.coins + amount });
+       try {
+           await updateDoc(doc(db, "users", selectedUserForCharge.id), {
+               coins: increment(amount)
+           });
+           alert(`تم شحن ${amount.toLocaleString()} كوينز للمستخدم ${selectedUserForCharge.name} بنجاح!`);
+           setChargeModalOpen(false);
+           setSelectedUserForCharge(null);
+       } catch(e) {
+           alert("حدث خطأ أثناء الشحن");
        }
-       setLocalUsers(prev => prev.map(u => u.id === selectedUserForCharge.id ? { ...u, coins: u.coins + amount } : u));
-       alert(`تم شحن ${amount.toLocaleString()} كوينز للمستخدم ${selectedUserForCharge.name} بنجاح!\nالرصيد الجديد: ${(selectedUserForCharge.coins + amount).toLocaleString()} 🪙`);
-       setChargeModalOpen(false);
-       setSelectedUserForCharge(null);
-       setChargeProof('');
     } else {
         alert("الرجاء إدخال مبلغ صحيح");
     }
   };
 
   // --- VIP Handlers ---
-  const handleSaveVip = () => {
+  const handleSaveVip = async () => {
     if (!editingVip) return;
-    setVipLevels(prev => prev.map(lvl => lvl.level === editingVip.level ? editingVip : lvl));
-    setEditingVip(null);
+    try {
+        await setDoc(doc(db, "vip_levels", editingVip.level.toString()), editingVip);
+        setEditingVip(null);
+    } catch(e) { alert("فشل الحفظ"); }
   };
 
   // --- Gift Handlers ---
-  const handleSaveGift = () => {
+  const handleSaveGift = async () => {
     if (!editingGift || !editingGift.name || !editingGift.cost) return;
     
-    if (editingGift.id) {
-       // Update existing
-       setGifts(prev => prev.map(g => g.id === editingGift.id ? editingGift as Gift : g));
-    } else {
-       // Create new
-       const newGift: Gift = {
-          id: Date.now().toString(),
-          name: editingGift.name!,
-          cost: Number(editingGift.cost),
-          icon: editingGift.icon || '🎁',
-          animationType: editingGift.animationType || 'pop',
-          isLucky: editingGift.isLucky || false
-       };
-       setGifts(prev => [...prev, newGift]);
-    }
-    setEditingGift(null);
+    const giftId = editingGift.id || Date.now().toString();
+    const newGift: Gift = {
+        id: giftId,
+        name: editingGift.name!,
+        cost: Number(editingGift.cost),
+        icon: editingGift.icon || '🎁',
+        animationType: editingGift.animationType || 'pop',
+        isLucky: editingGift.isLucky || false
+    };
+
+    try {
+        await setDoc(doc(db, "gifts", giftId), newGift);
+        setEditingGift(null);
+    } catch(e) { alert("فشل الحفظ"); }
   };
 
-  const handleDeleteGift = (id: string) => {
-    if (confirm('هل أنت متأكد من حذف هذه الهدية نهائياً؟')) setGifts(prev => prev.filter(g => g.id !== id));
+  const handleDeleteGift = async (id: string) => {
+    if (confirm('هل أنت متأكد من حذف هذه الهدية نهائياً؟')) {
+        await deleteDoc(doc(db, "gifts", id));
+    }
   };
 
   // --- Store Handlers ---
-  const handleSaveStoreItem = () => {
+  const handleSaveStoreItem = async () => {
     if (!editingStoreItem || !editingStoreItem.name || !editingStoreItem.price) return;
+    
+    const itemId = editingStoreItem.id || Date.now().toString();
+    const newItem: StoreItem = {
+        id: itemId,
+        name: editingStoreItem.name!,
+        price: Number(editingStoreItem.price),
+        type: editingStoreItem.type || 'frame',
+        url: editingStoreItem.url || ''
+    };
 
-    if (editingStoreItem.id) {
-       // Update
-       setStoreItems(prev => prev.map(i => i.id === editingStoreItem.id ? editingStoreItem as StoreItem : i));
-    } else {
-       // Create
-       const newItem: StoreItem = {
-          id: Date.now().toString(),
-          name: editingStoreItem.name!,
-          price: Number(editingStoreItem.price),
-          type: editingStoreItem.type || 'frame',
-          url: editingStoreItem.url || ''
-       };
-       setStoreItems(prev => [...prev, newItem]);
-    }
-    setEditingStoreItem(null);
+    try {
+        await setDoc(doc(db, "store_items", itemId), newItem);
+        setEditingStoreItem(null);
+    } catch(e) { alert("فشل الحفظ"); }
   };
 
-  const handleDeleteStoreItem = (id: string) => {
-    if (confirm('هل أنت متأكد من حذف هذا العنصر من المتجر؟')) setStoreItems(prev => prev.filter(i => i.id !== id));
+  const handleDeleteStoreItem = async (id: string) => {
+    if (confirm('هل أنت متأكد من حذف هذا العنصر من المتجر؟')) {
+        await deleteDoc(doc(db, "store_items", id));
+    }
+  };
+
+  // --- Game Settings Handler ---
+  const handleUpdateGameSettings = async (newSettings: GameSettings) => {
+     try {
+         await updateDoc(doc(db, "settings", "global"), { gameSettings: newSettings });
+     } catch(e) { console.error(e); }
   };
 
   const SidebarItem = ({ id, icon: Icon, label }: any) => (
@@ -293,7 +301,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
             <div>
                <h1 className="font-bold text-lg leading-none">لوحة القيادة</h1>
-               <span className="text-[10px] text-slate-400">Admin Control Panel v2.2</span>
+               <span className="text-[10px] text-slate-400">Admin Control Panel v2.2 (Connected)</span>
             </div>
          </div>
          <button onClick={onClose} className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition">
@@ -323,10 +331,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-slate-900 p-4 rounded-2xl border border-white/5 relative overflow-hidden">
                        <div className="absolute top-0 right-0 p-4 opacity-10"><Users size={64} /></div>
-                       <h3 className="text-slate-400 text-xs font-bold">إجمالي المستخدمين</h3>
-                       <p className="text-2xl font-black mt-1 text-white">{localUsers.length + 1420}</p>
+                       <h3 className="text-slate-400 text-xs font-bold">إجمالي المستخدمين (DB)</h3>
+                       <p className="text-2xl font-black mt-1 text-white">{localUsers.length}</p>
                        <span className="text-[10px] text-green-400 flex items-center gap-1 mt-2">
-                          <BarChart3 size={10} /> +12% هذا الأسبوع
+                          <BarChart3 size={10} /> Live Data
                        </span>
                     </div>
                     <div className="bg-slate-900 p-4 rounded-2xl border border-white/5 relative overflow-hidden">
@@ -696,7 +704,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                            <input 
                               type="range" min="0" max="100" step="5"
                               value={gameSettings.slotsWinRate}
-                              onChange={(e) => setGameSettings({...gameSettings, slotsWinRate: Number(e.target.value)})}
+                              onChange={(e) => handleUpdateGameSettings({...gameSettings, slotsWinRate: Number(e.target.value)})}
                               className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
                            />
                         </div>
@@ -719,7 +727,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                            <input 
                               type="range" min="0" max="100" step="5"
                               value={gameSettings.wheelWinRate}
-                              onChange={(e) => setGameSettings({...gameSettings, wheelWinRate: Number(e.target.value)})}
+                              onChange={(e) => handleUpdateGameSettings({...gameSettings, wheelWinRate: Number(e.target.value)})}
                               className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
                            />
                         </div>
@@ -745,7 +753,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                               <input 
                                  type="range" min="0" max="100" step="5"
                                  value={gameSettings.luckyGiftWinRate}
-                                 onChange={(e) => setGameSettings({...gameSettings, luckyGiftWinRate: Number(e.target.value)})}
+                                 onChange={(e) => handleUpdateGameSettings({...gameSettings, luckyGiftWinRate: Number(e.target.value)})}
                                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
                               />
                            </div>
@@ -759,7 +767,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                               <input 
                                  type="range" min="0" max="1000" step="10"
                                  value={gameSettings.luckyGiftRefundPercent}
-                                 onChange={(e) => setGameSettings({...gameSettings, luckyGiftRefundPercent: Number(e.target.value)})}
+                                 onChange={(e) => handleUpdateGameSettings({...gameSettings, luckyGiftRefundPercent: Number(e.target.value)})}
                                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                               />
                            </div>
@@ -846,7 +854,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                  </td>
                                  <td className="p-3">
                                     <div className="flex gap-2">
-                                       <button onClick={() => handleBanUser(u.id)} className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20">
+                                       <button onClick={() => handleBanUser(u.id, u.status as string)} className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20">
                                           <Ban size={14} />
                                        </button>
                                        <button 

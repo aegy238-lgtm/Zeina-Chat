@@ -13,7 +13,7 @@ import GameCenterModal from './GameCenterModal';
 import RoomSettingsModal from './RoomSettingsModal';
 import WinStrip from './WinStrip';
 import { db } from '../services/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit, updateDoc, doc, increment } from 'firebase/firestore';
 
 interface VoiceRoomProps {
   room: Room;
@@ -44,34 +44,27 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
-  // Initialize 8 fixed seats. Fill starting ones with room.speakers
-  const [seats, setSeats] = useState<(User | null)[]>(() => {
-    const initialSeats = new Array(8).fill(null);
-    room.speakers.forEach((speaker, idx) => {
-      if (idx < 8) initialSeats[idx] = speaker;
-    });
-    return initialSeats;
-  });
   
+  // Local state for visual seats mapping. 
+  // It derives from room.speakers passed via props (which are synced via App.tsx)
+  const [seats, setSeats] = useState<(User | null)[]>(new Array(8).fill(null));
+
   const [showGiftModal, setShowGiftModal] = useState(false);
-  const [showMenuModal, setShowMenuModal] = useState(false); // New Menu State
+  const [showMenuModal, setShowMenuModal] = useState(false);
   
   // Game States
   const [showGameCenter, setShowGameCenter] = useState(false);
   const [activeGame, setActiveGame] = useState<'wheel' | 'slots' | null>(null);
 
-  const [showRoomSettingsModal, setShowRoomSettingsModal] = useState(false); // Room Settings State
+  const [showRoomSettingsModal, setShowRoomSettingsModal] = useState(false);
 
   const [activeGiftEffect, setActiveGiftEffect] = useState<Gift | null>(null);
-  const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null); // null means 'All'
-  const [selectedGiftQuantity, setSelectedGiftQuantity] = useState(1); // Default x1
+  const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null);
+  const [selectedGiftQuantity, setSelectedGiftQuantity] = useState(1);
   
-  // Lucky Gift Win Strip State
   const [luckyWinAmount, setLuckyWinAmount] = useState<number>(0);
-  // Ref to hold the timeout ID for hiding the strip
   const luckyWinTimeoutRef = useRef<any>(null);
 
-  // Combo Logic State
   const [comboState, setComboState] = useState<ComboState>({
      gift: gifts[0],
      recipientId: null,
@@ -81,10 +74,30 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
   });
 
   const [entranceBanner, setEntranceBanner] = useState<string | null>(null);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null); // For Profile Sheet
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // --- FIREBASE SYNC: Seats Logic ---
+  // Sync room speakers to seats
+  useEffect(() => {
+     // Create a fresh array of 8 empty slots
+     const newSeats = new Array(8).fill(null);
+     
+     // Fill slots based on room.speakers. 
+     // We assume speakers fill slots 0, 1, 2... for simplicity in this model.
+     // Or check if speakers have a 'seatIndex' property (advanced).
+     // Here we just fill linearly.
+     if (room.speakers && Array.isArray(room.speakers)) {
+        room.speakers.forEach((speaker, idx) => {
+           if (idx < 8) newSeats[idx] = speaker;
+        });
+     }
+     
+     setSeats(newSeats);
+  }, [room.speakers]);
+
 
   // --- FIREBASE CHAT SYNC ---
   useEffect(() => {
@@ -99,28 +112,11 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
             return {
                 id: doc.id,
                 ...data,
-                // Handle timestamp conversion if needed, but keeping it simple for display
             } as ChatMessage;
         });
-        // We append local simulated messages to state, so here we might just replace.
-        // But since we have simulated messages locally, we need to merge or just rely on Firebase for user messages
-        // For simplicity: Replace state with Firebase messages + keep simulated ones? 
-        // Better: Just set messages from Firebase. Simulated messages will be added to this list locally 
-        // (but they won't persist on refresh, which is fine for simulation).
-        
-        // However, to keep the simulation effect active without pushing garbage to DB, 
-        // we will MERGE firebase messages with existing simulated messages in state is tricky.
-        // Let's just setMessages from Firebase and append simulated ones locally.
         
         setMessages(prev => {
-            // Keep simulated messages that are NOT in firebase (id starts with 'sim_')
-            const simulated = prev.filter(m => m.id.startsWith('sim_'));
-            // Filter out firebase messages from previous state to avoid duplicates if we were appending
-            // Actually, best is to just use what comes from DB for real chat.
-            
-            // Combining: Real DB messages + existing simulated ones.
-            // Sort by time? Simulated ones are 'now'. 
-            // Simplified: Just show DB messages. Simulated messages are added via separate effect.
+            // Keep simulated messages? No, for real experience, rely on DB.
             return fetchedMessages; 
         });
     });
@@ -129,18 +125,22 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
   }, [room.id]);
 
 
-  // Sync seat user data with current user updates (like VIP purchase)
+  // Update mute state in Firestore when isMuted prop changes
+  // This logic runs if the user IS a speaker
   useEffect(() => {
-     setSeats(prev => prev.map(s => s?.id === currentUser.id ? currentUser : s));
-  }, [currentUser]);
-
-  // Update mute state in seats visually when isMuted prop changes
-  useEffect(() => {
-     const mySeatIdx = seats.findIndex(s => s?.id === currentUser.id);
-     if (mySeatIdx !== -1) {
-        setSeats(prev => prev.map((s, i) => i === mySeatIdx ? { ...s!, isMuted: isMuted } : s));
+     const isSpeaker = room.speakers.find(s => s.id === currentUser.id);
+     
+     if (isSpeaker && isSpeaker.isMuted !== isMuted) {
+        // Find user index and update locally then push?
+        // Better: Update the speaker object inside the array in DB.
+        const updatedSpeakers = room.speakers.map(s => {
+           if (s.id === currentUser.id) return { ...s, isMuted: isMuted };
+           return s;
+        });
+        
+        updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers }).catch(console.error);
      }
-  }, [isMuted]);
+  }, [isMuted]); // Note: room.speakers dependency omitted to avoid loop, we check condition inside
 
   // Auto-scroll chat
   useEffect(() => {
@@ -153,46 +153,9 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
        const text = await generateSystemAnnouncement('دخل الغرفة', currentUser.name);
        setEntranceBanner(text);
        setTimeout(() => setEntranceBanner(null), 4000);
-       
-       // Send entrance message to Firebase? Or keep local?
-       // Let's keep system messages local to avoid DB spam for this demo
-       setMessages(prev => [...prev, {
-         id: `sim_${Date.now()}`,
-         userId: 'sys',
-         userName: 'النظام',
-         userLevel: UserLevel.NEW,
-         content: text,
-         type: 'system'
-       }]);
     };
     announceEntrance();
   }, []);
-
-  // Simulating live chat (Keep this local only)
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const simulatedText = await generateSimulatedChat(room.title, messages.slice(-5).map(m => m.content));
-      // Pick a random speaker from seats
-      const activeSpeakers = seats.filter(s => s !== null) as User[];
-      if (activeSpeakers.length === 0) return;
-
-      const randomSpeaker = activeSpeakers[Math.floor(Math.random() * activeSpeakers.length)];
-      
-      // Only add if it's NOT the current user (don't impersonate me)
-      if (randomSpeaker.id !== currentUser.id) {
-          setMessages(prev => [...prev, {
-            id: `sim_${Date.now()}`,
-            userId: randomSpeaker.id,
-            userName: randomSpeaker.name,
-            userLevel: randomSpeaker.level,
-            content: simulatedText,
-            type: 'text'
-          }]);
-      }
-    }, 8000); 
-
-    return () => clearInterval(interval);
-  }, [messages, seats, room.title, currentUser.id]);
 
   // Combo Timer Countdown
   useEffect(() => {
@@ -238,17 +201,14 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
         setInputValue('');
     } catch (e) {
         console.error("Error sending message", e);
-        addToast("فشل إرسال الرسالة", "error");
     }
   };
 
   const handleSendGift = async (gift: Gift, quantity: number = 1, recipientId: string | null = null) => {
     const totalCost = gift.cost * quantity;
 
-    // 1. Check Balance
     if (currentUser.coins < totalCost) {
       addToast('عذراً، رصيدك لا يكفي لإرسال هذه الهدية! 🪙', 'error');
-      // Stop combo if balance runs out
       setComboState(prev => ({ ...prev, active: false }));
       return;
     }
@@ -258,45 +218,39 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     let isLuckyWin = false;
 
     if (gift.isLucky) {
-       // Run luck check for the batch (simplification: one check for the whole batch or sum of checks?)
-       // Let's do a check proportional to the batch size to simulate multiple throws
        const chance = Math.random() * 100;
-       // Slightly increase chance for higher combos? No, keep it flat for fairness.
        if (chance < gameSettings.luckyGiftWinRate) {
            isLuckyWin = true;
            refundAmount = Math.floor(totalCost * (gameSettings.luckyGiftRefundPercent / 100));
        }
     }
 
-    // 3. Update Balance (Deduct Cost + Add Refund if Won)
-    const newBalance = currentUser.coins - totalCost + refundAmount;
-    
-    onUpdateUser({
-      ...currentUser,
-      coins: newBalance
-    });
+    // 3. Update Balance (Deduct Cost + Add Refund if Won) directly in DB
+    try {
+        await updateDoc(doc(db, "users", currentUser.id), {
+            coins: increment(refundAmount - totalCost)
+        });
+        
+        // Note: We should ideally update recipient balance too if recipientId is specific user.
+        // For 'All', we skip adding coins to everyone to simplify demo.
+        if (recipientId) {
+             // In real app, increment receiver's coins or diamond value
+        }
 
-    // Handle Lucky Win Visuals (Strip)
+    } catch(e) { console.error("Gift Transaction Failed", e); return; }
+
+    // Handle Lucky Win Visuals
     if (isLuckyWin) {
-       // Clear any existing timeout to prevent the strip from hiding if player wins again quickly
-       if (luckyWinTimeoutRef.current) {
-          clearTimeout(luckyWinTimeoutRef.current);
-       }
-
-       // Display Win Strip
+       if (luckyWinTimeoutRef.current) clearTimeout(luckyWinTimeoutRef.current);
        setLuckyWinAmount(refundAmount);
-       
-       // Hide strip after 4 seconds (extended time)
-       luckyWinTimeoutRef.current = setTimeout(() => {
-          setLuckyWinAmount(0);
-       }, 4000);
+       luckyWinTimeoutRef.current = setTimeout(() => setLuckyWinAmount(0), 4000);
     }
 
     setShowGiftModal(false);
     
     // Determine recipient name
     let recipientName = 'الجميع';
-    const finalRecipientId = recipientId || giftRecipientId; // Use passed ID (for combo) or state ID
+    const finalRecipientId = recipientId || giftRecipientId; 
     
     if (finalRecipientId) {
        const targetUser = seats.find(s => s?.id === finalRecipientId);
@@ -326,61 +280,61 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
     
     try {
         await addDoc(collection(db, "rooms", room.id, "messages"), giftMessage);
-    } catch(e) {
-        console.error("Error sending gift message", e);
-    }
+    } catch(e) { console.error(e); }
     
     // 4. Activate Combo Button
     setComboState({
        gift: gift,
        recipientId: finalRecipientId,
        quantity: quantity,
-       timer: 3, // 3 Seconds
+       timer: 3, 
        active: true
     });
   };
 
-  // Handler for Combo Button Click
   const handleComboClick = () => {
      if (comboState.active) {
-        // Reset timer
         setComboState(prev => ({ ...prev, timer: 3 }));
-        // Send again
         handleSendGift(comboState.gift, comboState.quantity, comboState.recipientId);
      }
   };
 
-  const handleSeatClick = (index: number) => {
+  const handleSeatClick = async (index: number) => {
     const userAtSeat = seats[index];
-    const myCurrentSeatIndex = seats.findIndex(s => s?.id === currentUser.id);
+    const amISitting = room.speakers.some(s => s.id === currentUser.id);
 
     if (userAtSeat) {
-      // Open Profile
+      // If someone is sitting there, open their profile
       setSelectedUser(userAtSeat);
     } else {
-      // Empty Seat Logic
-      const newSeats = [...seats];
-      
-      if (myCurrentSeatIndex !== -1) {
-        // Move seat - SILENT
-        newSeats[myCurrentSeatIndex] = null;
-        newSeats[index] = currentUser;
+      // Empty Seat
+      if (amISitting) {
+          // I am already sitting somewhere else. Move? Or Do nothing.
+          // For simplicity: If I click empty seat and I am sitting, I move to that seat (Swap logic requires index tracking).
+          // Current logic: Just sit down if not sitting.
+          addToast("أنت موجود بالفعل في المايك", "info");
       } else {
-        // Take seat - SILENT
-        newSeats[index] = currentUser;
-        // Check if we should auto-mute or respect global mute
-        if (isMuted) {
-           // already muted
-        } else {
-           // Not muted, so user goes on mic live
-        }
+          // Take seat: Add to room.speakers in DB
+          const newSpeaker = { ...currentUser, isMuted: false }; // Ensure we sit unmuted or follow state
+          const updatedSpeakers = [...room.speakers, newSpeaker];
+          
+          try {
+             await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
+          } catch(e) { console.error("Seat Error", e); }
       }
-      setSeats(newSeats);
-      // NOTE: In a real app, update 'speakers' array in Firebase Room Doc here
     }
   };
+  
+  // Custom leave seat function (not leaving room entirely)
+  const handleLeaveSeat = async () => {
+      const updatedSpeakers = room.speakers.filter(s => s.id !== currentUser.id);
+      try {
+         await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
+         addToast("تم النزول من المايك", "success");
+      } catch(e) { console.error(e); }
+  };
 
-  const handleProfileAction = (action: string, payload?: any) => {
+  const handleProfileAction = async (action: string, payload?: any) => {
     if (!selectedUser) return;
 
     if (action === 'gift') {
@@ -388,37 +342,27 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
        setShowGiftModal(true);
        setSelectedUser(null);
     } else if (action === 'toggleFollow') {
-       // Toggle follow state in seats
-       setSeats(prev => prev.map(u => {
-          if (u?.id === selectedUser.id) {
-             const newState = !u.isFollowing;
-             // Update selected user local state as well to reflect in open modal
-             setSelectedUser({...u, isFollowing: newState});
-             addToast(newState ? `تمت متابعة ${u.name}` : `تم إلغاء متابعة ${u.name}`, 'success');
-             return { ...u, isFollowing: newState };
-          }
-          return u;
-       }));
+       // Logic to follow user in DB (add to following list)
+       addToast("تمت المتابعة (تجريبي)", 'success');
     } else if (action === 'toggleMute') {
-       setSeats(prev => prev.map(u => {
-          if (u?.id === selectedUser.id) {
-             const newState = !u.isMuted;
-             setSelectedUser({...u, isMuted: newState});
-             return { ...u, isMuted: newState };
-          }
-          return u;
-       }));
+       // Only Host/Admin can mute others. 
+       // For now, assume we can update the room speaker state if we are admin
+       // Finding the user in speakers list and toggling mute
+       const updatedSpeakers = room.speakers.map(s => {
+           if (s.id === selectedUser.id) return { ...s, isMuted: !s.isMuted };
+           return s;
+       });
+       await updateDoc(doc(db, "rooms", room.id), { speakers: updatedSpeakers });
+       
     } else if (action === 'copyId') {
        addToast("تم نسخ المعرف بنجاح", 'success');
     } else if (action === 'message') {
        setSelectedUser(null);
     } else if (action === 'editProfile') {
-       setSelectedUser(null); // Close profile sheet first
-       onEditProfile(); // Trigger parent handler
+       setSelectedUser(null); 
+       onEditProfile(); 
     } else if (action === 'support') {
        addToast("تم إرسال الدعم", 'success');
-    } else if (action === 'more') {
-       // addToast("لا توجد خيارات إضافية حالياً", 'info');
     }
   };
 
@@ -643,7 +587,15 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
          {/* Controls Bar */}
          <div className="flex items-center gap-2">
             <button 
-               onClick={onToggleMute}
+               onClick={() => {
+                   if (room.speakers.some(s => s.id === currentUser.id)) {
+                       onToggleMute();
+                   } else {
+                       // Try to take a seat
+                       // Find first empty index? No, need to click specific seat.
+                       addToast("اضغط على مقعد فارغ للصعود", "info");
+                   }
+               }}
                className={`w-12 h-12 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 active:scale-90 border-2 relative overflow-hidden group ${
                   isMuted 
                     ? 'bg-slate-800 text-slate-400 border-slate-600' 
@@ -651,7 +603,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                }`}
             >
                {/* Pulse Animation when active */}
-               {!isMuted && (
+               {!isMuted && room.speakers.some(s => s.id === currentUser.id) && (
                   <span className="absolute inset-0 rounded-full bg-white/20 animate-ping opacity-75"></span>
                )}
                {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
@@ -903,7 +855,10 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 isOpen={true}
                 onClose={() => setActiveGame(null)}
                 userCoins={currentUser.coins}
-                onUpdateCoins={(newCoins) => onUpdateUser({...currentUser, coins: newCoins})}
+                onUpdateCoins={(newCoins) => {
+                    // Update user coins in DB directly from game
+                    updateDoc(doc(db, "users", currentUser.id), { coins: newCoins }).catch(console.error);
+                }}
                 winRate={gameSettings.wheelWinRate}
             />
         )}
@@ -912,7 +867,9 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 isOpen={true}
                 onClose={() => setActiveGame(null)}
                 userCoins={currentUser.coins}
-                onUpdateCoins={(newCoins) => onUpdateUser({...currentUser, coins: newCoins})}
+                onUpdateCoins={(newCoins) => {
+                    updateDoc(doc(db, "users", currentUser.id), { coins: newCoins }).catch(console.error);
+                }}
                 winRate={gameSettings.slotsWinRate}
             />
         )}
