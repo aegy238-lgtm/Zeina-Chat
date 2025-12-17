@@ -1,4 +1,4 @@
-import { Gift, Room, User, UserLevel, VIPPackage, StoreItem, Contributor, WheelItem } from './types';
+import { Gift, Room, User, UserLevel, VIPPackage, StoreItem, Contributor, WheelItem, SlotItem } from './types';
 
 // Mock frames using frame-like borders or transparent PNGs
 const BASE_FRAME_URL = "https://cdn-icons-png.flaticon.com/512";
@@ -23,6 +23,14 @@ export const WHEEL_ITEMS: WheelItem[] = [
   { id: 'apple', label: 'تفاح', color: '#ef4444', icon: '🍎', multiplier: 5, probability: 20 },
   { id: 'watermelon', label: 'بطيخ', color: '#10b981', icon: '🍉', multiplier: 2, probability: 45 },
   { id: 'grape', label: 'برقوق', color: '#8b5cf6', icon: '🍇', multiplier: 2, probability: 45 },
+];
+
+export const SLOT_ITEMS: SlotItem[] = [
+   { id: 'cherry', icon: '🍒', multiplier: 2 },
+   { id: 'lemon', icon: '🍋', multiplier: 3 },
+   { id: 'grape', icon: '🍇', multiplier: 5 },
+   { id: 'diamond', icon: '💎', multiplier: 10 },
+   { id: 'seven', icon: '7️⃣', multiplier: 20 },
 ];
 
 export const MOCK_CONTRIBUTORS: Contributor[] = [

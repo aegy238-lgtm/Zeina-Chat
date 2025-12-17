@@ -6,7 +6,9 @@ import { generateSimulatedChat, generateSystemAnnouncement } from '../services/g
 import { motion, AnimatePresence } from 'framer-motion';
 import UserProfileSheet from './UserProfileSheet';
 import Toast, { ToastMessage } from './Toast';
-import FruitGameModal from './FruitGameModal';
+import WheelGameModal from './WheelGameModal';
+import SlotsGameModal from './SlotsGameModal';
+import GameCenterModal from './GameCenterModal';
 import RoomSettingsModal from './RoomSettingsModal';
 
 interface VoiceRoomProps {
@@ -39,7 +41,11 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
   
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false); // New Menu State
-  const [showGameModal, setShowGameModal] = useState(false); // Game Modal State
+  
+  // Game States
+  const [showGameCenter, setShowGameCenter] = useState(false);
+  const [activeGame, setActiveGame] = useState<'wheel' | 'slots' | null>(null);
+
   const [showRoomSettingsModal, setShowRoomSettingsModal] = useState(false); // Room Settings State
 
   const [activeGiftEffect, setActiveGiftEffect] = useState<Gift | null>(null);
@@ -134,6 +140,18 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
   };
 
   const handleSendGift = (gift: Gift) => {
+    // 1. Check Balance
+    if (currentUser.coins < gift.cost) {
+      addToast('عذراً، رصيدك لا يكفي لإرسال هذه الهدية! 🪙', 'error');
+      return;
+    }
+
+    // 2. Deduct Coins
+    onUpdateUser({
+      ...currentUser,
+      coins: currentUser.coins - gift.cost
+    });
+
     setShowGiftModal(false);
     
     // Determine recipient name
@@ -497,7 +515,7 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
                  >
                     <div className="grid grid-cols-2 gap-4">
                         <button 
-                           onClick={() => { setShowMenuModal(false); setShowGameModal(true); }}
+                           onClick={() => { setShowMenuModal(false); setShowGameCenter(true); }}
                            className="bg-slate-800 hover:bg-slate-700 p-4 rounded-2xl flex flex-col items-center gap-2 border border-white/5 active:scale-95 transition-all"
                         >
                             <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center text-green-400">
@@ -604,20 +622,43 @@ const VoiceRoom: React.FC<VoiceRoomProps> = ({
          )}
       </AnimatePresence>
 
-      {/* 3. Fruit Game Modal */}
+      {/* 3. Game Center Modal */}
       <AnimatePresence>
-        {showGameModal && (
-            <FruitGameModal 
-                isOpen={showGameModal}
-                onClose={() => setShowGameModal(false)}
-                userCoins={currentUser.coins}
-                onUpdateCoins={(newCoins) => onUpdateUser({...currentUser, coins: newCoins})}
-                winRate={gameSettings.fruitGameWinRate}
+        {showGameCenter && (
+            <GameCenterModal 
+                isOpen={showGameCenter}
+                onClose={() => setShowGameCenter(false)}
+                onSelectGame={(game) => {
+                    setShowGameCenter(false);
+                    setActiveGame(game);
+                }}
             />
         )}
       </AnimatePresence>
 
-      {/* 4. Room Settings Modal */}
+      {/* 4. Active Game Modals */}
+      <AnimatePresence>
+        {activeGame === 'wheel' && (
+            <WheelGameModal 
+                isOpen={true}
+                onClose={() => setActiveGame(null)}
+                userCoins={currentUser.coins}
+                onUpdateCoins={(newCoins) => onUpdateUser({...currentUser, coins: newCoins})}
+                winRate={gameSettings.wheelWinRate}
+            />
+        )}
+        {activeGame === 'slots' && (
+            <SlotsGameModal
+                isOpen={true}
+                onClose={() => setActiveGame(null)}
+                userCoins={currentUser.coins}
+                onUpdateCoins={(newCoins) => onUpdateUser({...currentUser, coins: newCoins})}
+                winRate={gameSettings.slotsWinRate}
+            />
+        )}
+      </AnimatePresence>
+
+      {/* 5. Room Settings Modal */}
       <AnimatePresence>
         {showRoomSettingsModal && (
             <RoomSettingsModal 

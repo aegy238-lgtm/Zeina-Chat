@@ -1,7 +1,7 @@
 import React from 'react';
 import { User, UserLevel } from '../types';
 import { motion } from 'framer-motion';
-import { X, Crown, Heart, UserPlus, UserCheck, Gift, MessageCircle, MoreHorizontal, Shield, Gem, Copy, MicOff, Mic } from 'lucide-react';
+import { X, Crown, Heart, UserPlus, UserCheck, Gift, MessageCircle, MoreHorizontal, Shield, Gem, Copy, MicOff, Mic, Sparkles } from 'lucide-react';
 
 interface UserProfileSheetProps {
   user: User;
@@ -118,8 +118,12 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user, onClose, isCu
              </div>
              <div className="flex items-center gap-4 text-slate-400 text-sm mb-3">
                 <button onClick={handleCopyId} className="flex items-center gap-1 hover:text-white transition group">
-                   ID: <span className="font-mono text-slate-200">{user.id === 'me' ? '829102' : '102934'}</span>
-                   <Copy size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                   ID: 
+                   <span className={`font-mono ${user.isSpecialId ? "font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-sm italic tracking-wider" : "text-slate-200"}`}>
+                     {user.id === 'me' ? '829102' : user.id}
+                   </span>
+                   {user.isSpecialId && <Sparkles size={12} className="text-amber-400 animate-pulse" />}
+                   <Copy size={12} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
                 </button>
                 <span className="w-1 h-1 bg-slate-600 rounded-full"></span>
                 <span>{user.gender === 'male' ? 'ذكر' : 'أنثى'}</span>

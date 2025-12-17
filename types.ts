@@ -39,6 +39,7 @@ export interface User {
   ownedItems?: string[]; // IDs of owned items
   isFollowing?: boolean;
   isMuted?: boolean;
+  isSpecialId?: boolean; // New property for Special IDs
 }
 
 export interface Contributor {
@@ -88,7 +89,8 @@ export interface Room {
 }
 
 export interface GameSettings {
-  fruitGameWinRate: number; // 0 to 100 percentage
+  slotsWinRate: number; // For Slots Game
+  wheelWinRate: number; // For Wheel Game
 }
 
 export interface WheelItem {
@@ -98,4 +100,10 @@ export interface WheelItem {
   icon: string;
   multiplier: number;
   probability: number; // Relative weight
+}
+
+export interface SlotItem {
+  id: string;
+  icon: string;
+  multiplier: number;
 }

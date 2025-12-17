@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, User as UserIcon, Plus, Bell, Crown, Gem, Settings, ChevronRight, Edit3, Share2, LogOut, Shield, Database, ShoppingBag, Camera, Trophy, Flame } from 'lucide-react';
+import { Home, User as UserIcon, Plus, Bell, Crown, Gem, Settings, ChevronRight, Edit3, Share2, LogOut, Shield, Database, ShoppingBag, Camera, Trophy, Flame, Sparkles } from 'lucide-react';
 import RoomCard from './components/RoomCard';
 import VoiceRoom from './components/VoiceRoom';
 import Toast, { ToastMessage } from './components/Toast';
@@ -36,7 +36,8 @@ export default function App() {
 
   // Game Settings (Controlled by Admin)
   const [gameSettings, setGameSettings] = useState<GameSettings>({
-     fruitGameWinRate: 35 // Default 35% win rate
+     slotsWinRate: 35, // Default 35% win rate for Slots
+     wheelWinRate: 45 // Default 45% win rate for Wheel
   });
 
   const handleRoomJoin = (room: Room) => {
@@ -360,7 +361,7 @@ export default function App() {
              </div>
            )}
 
-           {/* Professional Profile Tab */}
+           {/* Professional Profile Tab - RESTORED */}
            {activeTab === 'profile' && (
              <div className="relative">
                 {/* Header Image (Cover) */}
@@ -422,7 +423,12 @@ export default function App() {
                          {user.name}
                          <span className="bg-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-black">Lv.{user.level}</span>
                       </h2>
-                      <p className="text-slate-400 text-xs mt-1 font-mono">ID: 8392102</p>
+                      <div className="mt-1 flex items-center gap-1">
+                        <span className={`font-mono text-xs ${user.isSpecialId ? "font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-sm italic tracking-wider" : "text-slate-400"}`}>
+                           ID: {user.id === 'me' ? '829102' : user.id}
+                        </span>
+                        {user.isSpecialId && <Sparkles size={12} className="text-yellow-400 animate-pulse" />}
+                      </div>
                       <p className="text-slate-300 text-sm mt-3 leading-relaxed">
                          {user.bio}
                       </p>
